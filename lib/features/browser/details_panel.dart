@@ -517,14 +517,20 @@ class _DetailsPanelState extends ConsumerState<DetailsPanel> {
       final includeSubfolders = browserState.includeSubfolders;
       final sort = browserState.sort;
       final searchExclude = browserState.searchExclude;
-      final currentProject = ref
-          .read(settingsControllerProvider)
-          .maybeWhen(data: (value) => value.activeProjectPath, orElse: () => null);
+      final settingsState = ref.read(settingsControllerProvider).maybeWhen(
+            data: (value) => value,
+            orElse: () => null,
+          );
+      final activeRoot = settingsState == null
+          ? null
+          : browserState.source == BrowserNavigationSource.project
+              ? settingsState.activeProjectPath
+              : settingsState.activeLibraryPath;
       final folder = browserState.activeFolder;
-      if (currentProject != null) {
+      if (activeRoot != null) {
         ref.invalidate(
           filesInFolderProvider((
-            projectRoot: currentProject,
+            projectRoot: activeRoot,
             folder: folder,
             search: search,
             includeSubfolders: includeSubfolders,

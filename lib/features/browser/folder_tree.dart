@@ -11,17 +11,19 @@ class FolderTree extends ConsumerWidget {
     required this.projectRoot,
     required this.activeFolder,
     required this.refreshToken,
+    this.emptyPlaceholder = 'Select a project root to view folders.',
     super.key,
   });
 
   final String projectRoot;
   final String activeFolder;
   final int refreshToken;
+  final String emptyPlaceholder;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (projectRoot.isEmpty) {
-      return const Center(child: Text('Select a project root to view folders.'));
+      return Center(child: Text(emptyPlaceholder, textAlign: TextAlign.center));
     }
 
     return FutureBuilder<bool>(

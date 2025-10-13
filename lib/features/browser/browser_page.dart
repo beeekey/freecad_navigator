@@ -6,6 +6,7 @@ import '../../core/indexing_service.dart';
 import '../../core/platform.dart';
 import '../../core/reload_signal.dart';
 import '../../models/file_record.dart';
+import '../../models/settings_model.dart';
 import '../settings/settings_controller.dart';
 import 'browser_controller.dart';
 import 'details_panel.dart';
@@ -28,6 +29,7 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
     final settingsAsync = ref.watch(settingsControllerProvider);
     final indexingAsync = ref.watch(indexingControllerProvider);
     final browserState = ref.watch(browserControllerProvider);
+    final browserController = ref.read(browserControllerProvider.notifier);
     final reloadToken = ref.watch(filesReloadSignalProvider);
     final includeSubfolders = browserState.includeSubfolders;
 
@@ -58,93 +60,97 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => _ErrorView(error: error, stackTrace: stackTrace),
         data: (settings) {
-          if (!settings.hasProjects) {
+          final hasProjects = settings.hasProjects;
+          final hasLibraries = settings.hasDefaultLibraries;
+
+          if (!hasProjects && !hasLibraries) {
             return const _EmptyState();
           }
 
+          var effectiveSource = browserState.source;
+          if (effectiveSource == BrowserNavigationSource.project && !hasProjects && hasLibraries) {
+            effectiveSource = BrowserNavigationSource.defaultLibrary;
+          } else if (effectiveSource == BrowserNavigationSource.defaultLibrary &&
+              !hasLibraries &&
+              hasProjects) {
+            effectiveSource = BrowserNavigationSource.project;
+          }
+
+          if (effectiveSource != browserState.source) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              browserController.setNavigationSource(effectiveSource);
+            });
+          }
+
+          final activeProjectPath = settings.activeProject?.path ?? '';
+          final activeLibraryPath = settings.activeLibrary?.path ?? '';
+          final activeRoot = effectiveSource == BrowserNavigationSource.project
+              ? activeProjectPath
+              : activeLibraryPath;
+
           final indexingState = indexingAsync.valueOrNull;
-          final activeRoot = settings.activeProject?.path ?? '';
-          final isIndexing = indexingState?.isIndexing(activeRoot) ?? false;
+          final isIndexing =
+              activeRoot.isNotEmpty ? indexingState?.isIndexing(activeRoot) ?? false : false;
 
           return Row(
             children: [
               SizedBox(
                 width: 280,
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Project',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            isExpanded: true,
-                            dropdownColor: Theme.of(context).colorScheme.primaryContainer,
-                            selectedItemBuilder: (context) {
-                              final theme = Theme.of(context);
-                              return settings.projectRoots.map((root) {
-                                final label = root.label?.isNotEmpty == true
-                                    ? root.label!
-                                    : p.basename(root.path);
-                                return Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(
-                                    label,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: theme.colorScheme.primary,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                );
-                              }).toList();
-                            },
-                            value: settings.activeProject?.path,
-                            onChanged: (value) {
-                              if (value != null) {
-                                ref.read(settingsControllerProvider.notifier).setActiveProject(value);
-                              }
-                            },
-                            items: settings.projectRoots
-                                .map(
-                                  (root) => DropdownMenuItem<String>(
-                                    value: root.path,
-                                    child: Text(
-                                      root.label?.isNotEmpty == true
-                                          ? root.label!
-                                          : p.basename(root.path),
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: Theme.of(context).colorScheme.onPrimaryContainer,
-                                      ),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            icon: Icon(
-                              Icons.arrow_drop_down,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                          ),
+                    _buildNavigationHeader(
+                      context: context,
+                      title: 'Projects',
+                      labelText: 'Project',
+                      emptyMessage: 'Add project roots in Settings.',
+                      icon: Icons.folder_outlined,
+                      isExpanded: effectiveSource == BrowserNavigationSource.project,
+                      roots: settings.projectRoots,
+                      activePath: activeProjectPath.isEmpty ? null : activeProjectPath,
+                      onTapHeader: () =>
+                          browserController.setNavigationSource(BrowserNavigationSource.project),
+                      onChanged: (value) {
+                        if (value != null) {
+                          ref.read(settingsControllerProvider.notifier).setActiveProject(value);
+                        }
+                      },
+                    ),
+                    if (effectiveSource == BrowserNavigationSource.project)
+                      Expanded(
+                        child: FolderTree(
+                          projectRoot: activeProjectPath,
+                          activeFolder: browserState.projectFolder,
+                          refreshToken: reloadToken,
                         ),
                       ),
-                    ),
                     const Divider(height: 1),
-                    Expanded(
-                      child: FolderTree(
-                        projectRoot: settings.activeProject?.path ?? '',
-                        activeFolder: browserState.activeFolder,
-                        refreshToken: reloadToken,
-                      ),
+                    _buildNavigationHeader(
+                      context: context,
+                      title: 'Default libraries',
+                      labelText: 'Default library',
+                      emptyMessage: 'Add default libraries in Settings.',
+                      icon: Icons.library_books_outlined,
+                      isExpanded: effectiveSource == BrowserNavigationSource.defaultLibrary,
+                      roots: settings.defaultLibraries,
+                      activePath: activeLibraryPath.isEmpty ? null : activeLibraryPath,
+                      onTapHeader: () =>
+                          browserController.setNavigationSource(BrowserNavigationSource.defaultLibrary),
+                      onChanged: (value) {
+                        if (value != null) {
+                          ref.read(settingsControllerProvider.notifier).setActiveLibrary(value);
+                        }
+                      },
                     ),
+                    if (effectiveSource == BrowserNavigationSource.defaultLibrary)
+                      Expanded(
+                        child: FolderTree(
+                          projectRoot: activeLibraryPath,
+                          activeFolder: browserState.libraryFolder,
+                          refreshToken: reloadToken,
+                          emptyPlaceholder: 'Select a default library to view folders.',
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -280,7 +286,7 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
                     Expanded(
                       child: browserState.viewMode == BrowserViewMode.grid
                           ? FileGrid(
-                              projectRoot: settings.activeProject?.path ?? '',
+                              projectRoot: activeRoot,
                               folder: browserState.activeFolder,
                               includeSubfolders: includeSubfolders,
                               selection: browserState.selectedFileIds,
@@ -290,7 +296,7 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
                               onOpenFile: (record) => _openInFreecad(context, settings.freecadExecutable, record),
                             )
                           : FilePreviewList(
-                              projectRoot: settings.activeProject?.path ?? '',
+                              projectRoot: activeRoot,
                               folder: browserState.activeFolder,
                               includeSubfolders: includeSubfolders,
                               sort: browserState.sort,
@@ -308,7 +314,7 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
               SizedBox(
                 width: 320,
                 child: DetailsPanel(
-                  projectRoot: settings.activeProject?.path ?? '',
+                  projectRoot: activeRoot,
                   selectedFileIds: browserState.selectedFileIds,
                 ),
               ),
@@ -317,6 +323,142 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
         },
       ),
     );
+  }
+
+  Widget _buildNavigationHeader({
+    required BuildContext context,
+    required String title,
+    required String labelText,
+    required String emptyMessage,
+    required IconData icon,
+    required bool isExpanded,
+    required List<ProjectRoot> roots,
+    required String? activePath,
+    required VoidCallback onTapHeader,
+    required ValueChanged<String?> onChanged,
+  }) {
+    final theme = Theme.of(context);
+    final hasRoots = roots.isNotEmpty;
+    final resolvedActivePath = hasRoots
+        ? (activePath != null && roots.any((root) => root.path == activePath)
+            ? activePath
+            : roots.first.path)
+        : null;
+    final headerColor = isExpanded ? theme.colorScheme.primary : theme.textTheme.titleSmall?.color;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: hasRoots ? onTapHeader : null,
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  Icon(icon, size: 20, color: headerColor),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: headerColor,
+                      ),
+                    ),
+                  ),
+                  if (hasRoots)
+                    Icon(
+                      isExpanded ? Icons.expand_less : Icons.expand_more,
+                      color: headerColor,
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (hasRoots)
+            InputDecorator(
+              decoration: InputDecoration(
+                labelText: labelText,
+                border: const OutlineInputBorder(),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  dropdownColor: theme.colorScheme.primaryContainer,
+                  value: resolvedActivePath,
+                  onChanged: onChanged,
+                  items: roots
+                      .map(
+                        (root) => DropdownMenuItem<String>(
+                          value: root.path,
+                          child: Text(
+                            _displayNameForRoot(root),
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: theme.colorScheme.onPrimaryContainer,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  selectedItemBuilder: (context) {
+                    return roots
+                        .map(
+                          (root) => Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              _displayNameForRoot(root),
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList();
+                  },
+                  icon: Icon(
+                    Icons.arrow_drop_down,
+                    color: theme.colorScheme.primary,
+                  ),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ),
+            )
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: theme.dividerColor.withValues(alpha: 0.4),
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                emptyMessage,
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _displayNameForRoot(ProjectRoot root) {
+    if (root.label?.isNotEmpty == true) {
+      return root.label!;
+    }
+    return p.basename(root.path);
   }
 }
 

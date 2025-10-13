@@ -96,6 +96,32 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     (root) => _ProjectRootTile(root: root),
                   ),
                 const SizedBox(height: 24),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text(
+                    'Default libraries',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'Register library folders that you want quick access to from the browser sidebar.',
+                  ),
+                  trailing: FilledButton.icon(
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add'),
+                    onPressed: () => _addDefaultLibrary(context),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (settings.defaultLibraries.isEmpty)
+                  const ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('No default libraries yet.'),
+                  )
+                else
+                  ...settings.defaultLibraries.map(
+                    (root) => _LibraryTile(root: root),
+                  ),
+                const SizedBox(height: 24),
                 const Text(
                   'Theme',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
@@ -179,6 +205,27 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Added project root: ${dir.path}')),
+    );
+  }
+
+  Future<void> _addDefaultLibrary(BuildContext context) async {
+    final path =
+        await FilePicker.platform.getDirectoryPath(dialogTitle: 'Select default library');
+    if (path == null) return;
+
+    final dir = Directory(path);
+    if (!await dir.exists()) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Directory not found: $path')),
+      );
+      return;
+    }
+
+    await ref.read(settingsControllerProvider.notifier).addDefaultLibrary(dir.path);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Added default library: ${dir.path}')),
     );
   }
 
@@ -286,6 +333,76 @@ class _ProjectRootTile extends ConsumerWidget {
     );
     if (confirmed == true) {
       await controller.renameProjectRoot(
+        root.path,
+        labelController.text.trim().isEmpty ? null : labelController.text.trim(),
+      );
+    }
+  }
+}
+
+class _LibraryTile extends ConsumerWidget {
+  const _LibraryTile({required this.root});
+
+  final ProjectRoot root;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final controller = ref.read(settingsControllerProvider.notifier);
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      child: ListTile(
+        title: Text(root.label?.isNotEmpty == true ? root.label! : root.path),
+        subtitle: root.label?.isNotEmpty == true ? Text(root.path) : null,
+        trailing: Wrap(
+          spacing: 8,
+          children: [
+            IconButton(
+              tooltip: 'Rename',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: () => _rename(context, controller),
+            ),
+            IconButton(
+              tooltip: 'Remove',
+              icon: Icon(Icons.delete_outline, color: theme.colorScheme.error),
+              onPressed: () => controller.removeDefaultLibrary(root.path),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _rename(
+    BuildContext context,
+    SettingsController controller,
+  ) async {
+    final labelController = TextEditingController(text: root.label ?? '');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Rename default library'),
+          content: TextField(
+            controller: labelController,
+            decoration: const InputDecoration(labelText: 'Display name'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed == true) {
+      await controller.renameDefaultLibrary(
         root.path,
         labelController.text.trim().isEmpty ? null : labelController.text.trim(),
       );

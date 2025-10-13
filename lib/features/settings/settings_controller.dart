@@ -24,7 +24,9 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     };
 
     final rootsJson = raw['project_roots'];
+    final librariesJson = raw['default_libraries'];
     final activeProjectPath = raw['active_project_path'];
+    final activeLibraryPath = raw['active_library_path'];
     final freecadExecutable = raw['freecad_executable'];
     final themePreferenceValue = raw['theme_preference'];
 
@@ -38,27 +40,46 @@ class SettingsController extends AsyncNotifier<SettingsState> {
       }
     }
 
+    final defaultLibraries = <ProjectRoot>[];
+    if (librariesJson != null && librariesJson.isNotEmpty) {
+      final parsed = jsonDecode(librariesJson) as List<dynamic>;
+      for (final entry in parsed) {
+        defaultLibraries.add(
+          ProjectRoot.fromJson(Map<String, dynamic>.from(entry as Map)),
+        );
+      }
+    }
+
     final state = SettingsState(
       projectRoots: projectRoots,
+      defaultLibraries: defaultLibraries,
       activeProjectPath: projectRoots.any((e) => e.path == activeProjectPath)
           ? activeProjectPath
           : projectRoots.isNotEmpty
               ? projectRoots.first.path
               : null,
+      activeLibraryPath: defaultLibraries.any((e) => e.path == activeLibraryPath)
+          ? activeLibraryPath
+          : defaultLibraries.isNotEmpty
+              ? defaultLibraries.first.path
+              : null,
       freecadExecutable: freecadExecutable,
       themePreference: ThemePreferenceX.fromStorage(themePreferenceValue),
     );
 
-    if (state.projectRoots.isEmpty) {
-      return state;
-    }
+    SettingsState nextState = state;
 
-    if (state.activeProjectPath == null) {
+    if (state.projectRoots.isNotEmpty && state.activeProjectPath == null) {
       await _persistActiveProject(state.projectRoots.first.path);
-      return state.copyWith(activeProjectPath: state.projectRoots.first.path);
+      nextState = nextState.copyWith(activeProjectPath: state.projectRoots.first.path);
     }
 
-    return state;
+    if (state.defaultLibraries.isNotEmpty && state.activeLibraryPath == null) {
+      await _persistActiveLibrary(state.defaultLibraries.first.path);
+      nextState = nextState.copyWith(activeLibraryPath: state.defaultLibraries.first.path);
+    }
+
+    return nextState;
   }
 
   Future<void> addProjectRoot(String path, {String? label}) async {
@@ -121,6 +142,81 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     );
   }
 
+  Future<void> addDefaultLibrary(String path, {String? label}) async {
+    final current = await future;
+
+    if (current.defaultLibraries.any((root) => root.path == path)) {
+      await _ensureActiveLibrary();
+      return;
+    }
+
+    final normalized = p.normalize(path);
+    final updatedLibraries = [
+      ...current.defaultLibraries,
+      ProjectRoot(path: normalized, label: label),
+    ];
+
+    await _persistDefaultLibraries(updatedLibraries);
+
+    var newActive = current.activeLibraryPath;
+    newActive ??= normalized;
+
+    if (current.defaultLibraries.isEmpty) {
+      await _persistActiveLibrary(normalized);
+      newActive = normalized;
+    }
+
+    state = AsyncValue.data(
+      current.copyWith(
+        defaultLibraries: updatedLibraries,
+        activeLibraryPath: newActive,
+      ),
+    );
+  }
+
+  Future<void> removeDefaultLibrary(String path) async {
+    final current = await future;
+    final normalized = p.normalize(path);
+
+    final updatedLibraries =
+        current.defaultLibraries.where((root) => root.path != normalized).toList();
+
+    if (updatedLibraries.length == current.defaultLibraries.length) {
+      return;
+    }
+
+    await _persistDefaultLibraries(updatedLibraries);
+
+    var newActive = current.activeLibraryPath;
+    if (newActive == normalized) {
+      newActive = updatedLibraries.isNotEmpty ? updatedLibraries.first.path : null;
+      await _persistActiveLibrary(newActive);
+    }
+
+    state = AsyncValue.data(
+      current.copyWith(
+        defaultLibraries: updatedLibraries,
+        activeLibraryPath: newActive,
+      ),
+    );
+  }
+
+  Future<void> renameDefaultLibrary(String path, String? label) async {
+    final current = await future;
+    final normalized = p.normalize(path);
+
+    final updatedLibraries = current.defaultLibraries
+        .map((root) =>
+            root.path == normalized ? ProjectRoot(path: root.path, label: label) : root)
+        .toList();
+
+    await _persistDefaultLibraries(updatedLibraries);
+
+    state = AsyncValue.data(
+      current.copyWith(defaultLibraries: updatedLibraries),
+    );
+  }
+
   Future<void> renameProjectRoot(String path, String? label) async {
     final current = await future;
     final normalized = p.normalize(path);
@@ -151,6 +247,20 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     );
   }
 
+  Future<void> setActiveLibrary(String path) async {
+    final current = await future;
+    final normalized = p.normalize(path);
+
+    if (!current.defaultLibraries.any((root) => root.path == normalized)) {
+      return;
+    }
+
+    await _persistActiveLibrary(normalized);
+    state = AsyncValue.data(
+      current.copyWith(activeLibraryPath: normalized),
+    );
+  }
+
   Future<void> updateFreecadExecutable(String? path) async {
     final current = await future;
     await _persistSetting('freecad_executable', path);
@@ -172,8 +282,17 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     await _persistSetting('project_roots', jsonString);
   }
 
+  Future<void> _persistDefaultLibraries(List<ProjectRoot> libraries) async {
+    final jsonString = jsonEncode(libraries.map((root) => root.toJson()).toList());
+    await _persistSetting('default_libraries', jsonString);
+  }
+
   Future<void> _persistActiveProject(String? path) async {
     await _persistSetting('active_project_path', path);
+  }
+
+  Future<void> _persistActiveLibrary(String? path) async {
+    await _persistSetting('active_library_path', path);
   }
 
   Future<void> _ensureActiveProject() async {
@@ -185,6 +304,18 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     await _persistActiveProject(first);
     state = AsyncValue.data(
       current.copyWith(activeProjectPath: first),
+    );
+  }
+
+  Future<void> _ensureActiveLibrary() async {
+    final current = await future;
+    if (current.activeLibraryPath != null || current.defaultLibraries.isEmpty) {
+      return;
+    }
+    final first = current.defaultLibraries.first.path;
+    await _persistActiveLibrary(first);
+    state = AsyncValue.data(
+      current.copyWith(activeLibraryPath: first),
     );
   }
 

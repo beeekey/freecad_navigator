@@ -11,10 +11,13 @@ final browserControllerProvider =
 
 enum BrowserSort { nameAsc, nameDesc, dateAsc, dateDesc }
 enum BrowserViewMode { grid, list }
+enum BrowserNavigationSource { project, defaultLibrary }
 
 class BrowserState {
   BrowserState({
-    this.activeFolder = '',
+    this.source = BrowserNavigationSource.project,
+    this.projectFolder = '',
+    this.libraryFolder = '',
     this.searchQuery = '',
     this.includeSubfolders = false,
     this.sort = BrowserSort.nameAsc,
@@ -23,7 +26,9 @@ class BrowserState {
     Set<int>? selectedFileIds,
   }) : selectedFileIds = selectedFileIds ?? <int>{};
 
-  final String activeFolder;
+  final BrowserNavigationSource source;
+  final String projectFolder;
+  final String libraryFolder;
   final String searchQuery;
   final bool includeSubfolders;
   final BrowserSort sort;
@@ -32,9 +37,13 @@ class BrowserState {
   final Set<int> selectedFileIds;
 
   bool get hasSelection => selectedFileIds.isNotEmpty;
+  String get activeFolder =>
+      source == BrowserNavigationSource.project ? projectFolder : libraryFolder;
 
   BrowserState copyWith({
-    String? activeFolder,
+    BrowserNavigationSource? source,
+    String? projectFolder,
+    String? libraryFolder,
     String? searchQuery,
     bool? includeSubfolders,
     BrowserSort? sort,
@@ -43,7 +52,9 @@ class BrowserState {
     Set<int>? selectedFileIds,
   }) {
     return BrowserState(
-      activeFolder: activeFolder ?? this.activeFolder,
+      source: source ?? this.source,
+      projectFolder: projectFolder ?? this.projectFolder,
+      libraryFolder: libraryFolder ?? this.libraryFolder,
       searchQuery: searchQuery ?? this.searchQuery,
       includeSubfolders: includeSubfolders ?? this.includeSubfolders,
       sort: sort ?? this.sort,
@@ -57,27 +68,80 @@ class BrowserState {
 class BrowserController extends Notifier<BrowserState> {
   @override
   BrowserState build() {
+    final settingsAsync = ref.watch(settingsControllerProvider);
+    final settings = settingsAsync.valueOrNull;
+
+    final initialSource = settings?.activeProjectPath != null
+        ? BrowserNavigationSource.project
+        : settings?.activeLibraryPath != null
+            ? BrowserNavigationSource.defaultLibrary
+            : BrowserNavigationSource.project;
+
     ref.listen<AsyncValue<SettingsState>>(
       settingsControllerProvider,
       (previous, next) {
-        final previousActive = previous?.valueOrNull?.activeProjectPath;
-        final nextActive = next.valueOrNull?.activeProjectPath;
-        if (previousActive != nextActive) {
-          // Reset folder and selection when switching projects.
-          state = BrowserState();
+        final previousState = previous?.valueOrNull;
+        final nextState = next.valueOrNull;
+        if (nextState == null) {
+          return;
+        }
+
+        final previousProject = previousState?.activeProjectPath;
+        final nextProject = nextState.activeProjectPath;
+        final previousLibrary = previousState?.activeLibraryPath;
+        final nextLibrary = nextState.activeLibraryPath;
+
+        if (previousProject != nextProject) {
+          state = state.copyWith(
+            projectFolder: '',
+            selectedFileIds: state.source == BrowserNavigationSource.project
+                ? <int>{}
+                : state.selectedFileIds,
+          );
+        }
+
+        if (previousLibrary != nextLibrary) {
+          state = state.copyWith(
+            libraryFolder: '',
+            selectedFileIds: state.source == BrowserNavigationSource.defaultLibrary
+                ? <int>{}
+                : state.selectedFileIds,
+          );
+        }
+
+        if (state.source == BrowserNavigationSource.defaultLibrary &&
+            nextLibrary == null) {
+          // Active library removed; fall back to projects.
+          state = state.copyWith(
+            source: BrowserNavigationSource.project,
+            selectedFileIds: <int>{},
+          );
+        } else if (state.source == BrowserNavigationSource.project &&
+            nextProject == null &&
+            nextLibrary != null) {
+          // No active project but libraries exist.
+          state = state.copyWith(
+            source: BrowserNavigationSource.defaultLibrary,
+            selectedFileIds: <int>{},
+          );
         }
       },
-      fireImmediately: true,
     );
 
-    return BrowserState();
+    return BrowserState(source: initialSource);
   }
 
   void setActiveFolder(String folder) {
-    state = state.copyWith(
-      activeFolder: folder,
-      selectedFileIds: <int>{},
-    );
+    state = switch (state.source) {
+      BrowserNavigationSource.project => state.copyWith(
+          projectFolder: folder,
+          selectedFileIds: <int>{},
+        ),
+      BrowserNavigationSource.defaultLibrary => state.copyWith(
+          libraryFolder: folder,
+          selectedFileIds: <int>{},
+        ),
+    };
   }
 
   void updateSearchQuery(String query) {
@@ -133,7 +197,28 @@ class BrowserController extends Notifier<BrowserState> {
   }
 
   void clearSelection() {
-    if (state.selectedFileIds.isEmpty) return;
-    state = state.copyWith(selectedFileIds: <int>{});
+   if (state.selectedFileIds.isEmpty) return;
+   state = state.copyWith(selectedFileIds: <int>{});
+  }
+
+  void setNavigationSource(BrowserNavigationSource source) {
+    if (state.source == source) {
+      return;
+    }
+    state = state.copyWith(
+      source: source,
+      selectedFileIds: <int>{},
+    );
+  }
+
+  void resetFolderForSource(BrowserNavigationSource source) {
+    switch (source) {
+      case BrowserNavigationSource.project:
+        state = state.copyWith(projectFolder: '');
+        break;
+      case BrowserNavigationSource.defaultLibrary:
+        state = state.copyWith(libraryFolder: '');
+        break;
+    }
   }
 }

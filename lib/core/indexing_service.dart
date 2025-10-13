@@ -90,9 +90,11 @@ class IndexingController extends AsyncNotifier<IndexingState> {
   ) {
     final previousRoots = {
       if (previous != null) ...previous.projectRoots.map((r) => r.path),
+      if (previous != null) ...previous.defaultLibraries.map((r) => r.path),
     };
     final nextRoots = {
       if (next != null) ...next.projectRoots.map((r) => r.path),
+      if (next != null) ...next.defaultLibraries.map((r) => r.path),
     };
 
     final added = nextRoots.difference(previousRoots);
@@ -109,9 +111,14 @@ class IndexingController extends AsyncNotifier<IndexingState> {
     }
 
     // Ensure active project stays indexed even if not newly added.
-    final active = next?.activeProjectPath;
-    if (active != null && nextRoots.contains(active)) {
-      unawaited(ensureIndexed(active));
+    final activeTargets = <String>{
+      if (next?.activeProjectPath != null) next!.activeProjectPath!,
+      if (next?.activeLibraryPath != null) next!.activeLibraryPath!,
+    };
+    for (final active in activeTargets) {
+      if (nextRoots.contains(active)) {
+        unawaited(ensureIndexed(active));
+      }
     }
   }
 
