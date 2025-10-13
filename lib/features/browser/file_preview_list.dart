@@ -13,9 +13,11 @@ class FilePreviewList extends ConsumerWidget {
     required this.folder,
     required this.includeSubfolders,
     required this.sort,
+    required this.searchExclude,
     required this.selection,
     required this.onTap,
     required this.onOpen,
+    required this.isIndexing,
     super.key,
   });
 
@@ -23,9 +25,11 @@ class FilePreviewList extends ConsumerWidget {
   final String folder;
   final bool includeSubfolders;
   final BrowserSort sort;
+  final bool searchExclude;
   final Set<int> selection;
   final void Function(FileRecord) onTap;
   final void Function(FileRecord) onOpen;
+  final bool isIndexing;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -38,6 +42,7 @@ class FilePreviewList extends ConsumerWidget {
           search: searchQuery,
           includeSubfolders: includeSubfolders,
           sort: sort,
+          searchExclude: searchExclude,
         ),
       ),
     );
@@ -52,6 +57,9 @@ class FilePreviewList extends ConsumerWidget {
       ),
       data: (files) {
         if (files.isEmpty) {
+          if (isIndexing) {
+            return const _IndexingPlaceholder();
+          }
           return const Center(child: Text('No files'));
         }
         return ListView.separated(
@@ -82,6 +90,35 @@ class FilePreviewList extends ConsumerWidget {
           },
         );
       },
+    );
+  }
+}
+
+class _IndexingPlaceholder extends StatelessWidget {
+  const _IndexingPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 36,
+            height: 36,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              valueColor: AlwaysStoppedAnimation(theme.colorScheme.primary),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Indexing files…',
+            style: theme.textTheme.bodyMedium,
+          ),
+        ],
+      ),
     );
   }
 }

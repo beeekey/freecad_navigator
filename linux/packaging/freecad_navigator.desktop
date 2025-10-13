@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=FreeCAD Navigator
+Comment=Browse and manage FreeCAD project assets
+Exec=freecad_navigator
+Icon=freecad_navigator
+Terminal=false
+Categories=Graphics;Utility;Engineering;

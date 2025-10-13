@@ -41,7 +41,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(
+              'assets/images/FreeCadExplorer_Logo.png',
+              height: 32,
+            ),
+            const SizedBox(width: 8),
+            const Text('Settings'),
+          ],
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
@@ -85,6 +95,31 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ...settings.projectRoots.map(
                     (root) => _ProjectRootTile(root: root),
                   ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Theme',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                SegmentedButton<ThemePreference>(
+                  segments: ThemePreference.values
+                      .map(
+                        (pref) => ButtonSegment<ThemePreference>(
+                          value: pref,
+                          label: Text(pref.label),
+                        ),
+                      )
+                      .toList(),
+                  selected: {settings.themePreference},
+                  onSelectionChanged: (selection) {
+                    if (selection.isNotEmpty) {
+                      ref
+                          .read(settingsControllerProvider.notifier)
+                          .updateThemePreference(selection.first);
+                    }
+                  },
+                ),
+                const SizedBox(height: 24),
                 const Divider(height: 32),
                 const Text(
                   'FreeCAD executable',

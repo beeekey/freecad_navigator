@@ -1,6 +1,6 @@
 {
-    "name": "freecad_navigator",
-    "short_name": "freecad_navigator",
+    "name": "FreeCAD Navigator",
+    "short_name": "FreeCAD Navigator",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

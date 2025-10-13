@@ -1,6 +1,8 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
+#include <gdk/gdk.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
@@ -14,6 +16,50 @@ struct _MyApplication {
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
+// Improved icon loading function
+static GdkPixbuf* load_app_icon() {
+  g_autoptr(GError) error = nullptr;
+  GdkPixbuf* icon_pixbuf = nullptr;
+  
+  // Try multiple paths for the icon
+  const gchar* icon_paths[] = {
+    "assets/images/FreeCadExplorer_Logo.png",
+    "data/flutter_assets/assets/images/FreeCadExplorer_Logo.png",
+    "../data/flutter_assets/assets/images/FreeCadExplorer_Logo.png",
+    "../../../../assets/images/FreeCadExplorer_Logo.png",
+    nullptr
+  };
+  
+  gchar* executable_path = g_file_read_link("/proc/self/exe", nullptr);
+  if (executable_path != nullptr) {
+    gchar* executable_dir = g_path_get_dirname(executable_path);
+    
+    for (int i = 0; icon_paths[i] != nullptr; i++) {
+      g_autofree gchar* full_path = g_build_filename(executable_dir, icon_paths[i], nullptr);
+      icon_pixbuf = gdk_pixbuf_new_from_file(full_path, &error);
+      if (icon_pixbuf != nullptr) {
+        g_print("Loaded icon from: %s\n", full_path);
+        break;
+      }
+      g_clear_error(&error);
+    }
+    
+    g_free(executable_dir);
+    g_free(executable_path);
+  }
+  
+  // Fallback: try system icon theme
+  if (icon_pixbuf == nullptr) {
+    GtkIconTheme* icon_theme = gtk_icon_theme_get_default();
+    icon_pixbuf = gtk_icon_theme_load_icon(icon_theme, "freecad_navigator", 48, GTK_ICON_LOOKUP_USE_BUILTIN, &error);
+    if (icon_pixbuf != nullptr) {
+      g_print("Loaded icon from system theme\n");
+    }
+  }
+  
+  return icon_pixbuf;
+}
+
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView *view)
 {
@@ -25,6 +71,28 @@ static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
+
+  g_set_application_name("FreeCAD Navigator");
+
+  // Set window icon using multiple methods for better compatibility
+  gtk_window_set_icon_name(window, "freecad_navigator");
+  
+  // Load and set custom icon
+  GdkPixbuf* icon_pixbuf = load_app_icon();
+  if (icon_pixbuf != nullptr) {
+    gtk_window_set_icon(window, icon_pixbuf);
+    gtk_window_set_default_icon(icon_pixbuf);
+    
+    // Set as default icon for all windows
+    GList* icon_list = nullptr;
+    icon_list = g_list_append(icon_list, icon_pixbuf);
+    gtk_window_set_default_icon_list(icon_list);
+    g_list_free(icon_list);
+    
+    g_print("Window icon set successfully\n");
+  } else {
+    g_print("Failed to load window icon\n");
+  }
 
   // Use a header bar when running in GNOME as this is the common style used
   // by applications and is the setup most users will be using (e.g. Ubuntu
@@ -46,11 +114,11 @@ static void my_application_activate(GApplication* application) {
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "freecad_navigator");
+    gtk_header_bar_set_title(header_bar, "FreeCAD Navigator");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
-    gtk_window_set_title(window, "freecad_navigator");
+    gtk_window_set_title(window, "FreeCAD Navigator");
   }
 
   gtk_window_set_default_size(window, 1280, 720);
@@ -131,11 +199,8 @@ static void my_application_class_init(MyApplicationClass* klass) {
 static void my_application_init(MyApplication* self) {}
 
 MyApplication* my_application_new() {
-  // Set the program name to the application ID, which helps various systems
-  // like GTK and desktop environments map this running application to its
-  // corresponding .desktop file. This ensures better integration by allowing
-  // the application to be recognized beyond its binary name.
-  g_set_prgname(APPLICATION_ID);
+  g_set_prgname("FreeCAD Navigator");
+  gdk_set_program_class("FreeCAD Navigator");
 
   return MY_APPLICATION(g_object_new(my_application_get_type(),
                                      "application-id", APPLICATION_ID,

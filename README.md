@@ -1,4 +1,4 @@
-# freecad_navigator
+# FreeCAD Navigator
 
 A new Flutter project.
 

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:transparent_image/transparent_image.dart';
 
+import '../../core/indexing_service.dart';
 import '../../models/file_record.dart';
 import 'browser_controller.dart';
 import 'browser_providers.dart';
@@ -17,6 +18,8 @@ class FileGrid extends ConsumerWidget {
     required this.selection,
     required this.onOpenFile,
     required this.sort,
+    required this.searchExclude,
+    required this.isIndexing,
     super.key,
   });
 
@@ -26,6 +29,8 @@ class FileGrid extends ConsumerWidget {
   final Set<int> selection;
   final void Function(FileRecord) onOpenFile;
   final BrowserSort sort;
+  final bool searchExclude;
+  final bool isIndexing;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -38,6 +43,7 @@ class FileGrid extends ConsumerWidget {
           search: searchQuery,
           includeSubfolders: includeSubfolders,
           sort: sort,
+          searchExclude: searchExclude,
         ),
       ),
     );
@@ -52,11 +58,30 @@ class FileGrid extends ConsumerWidget {
       ),
       data: (files) {
         if (files.isEmpty) {
+          if (isIndexing) {
+            return const _IndexingPlaceholder();
+          }
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
-              child: Text(
-                _emptyMessage(folder, includeSubfolders),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _emptyMessage(folder, includeSubfolders),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Refresh index'),
+                    onPressed: projectRoot.isEmpty
+                        ? null
+                        : () => ref
+                            .read(indexingControllerProvider.notifier)
+                            .ensureIndexed(projectRoot),
+                  ),
+                ],
               ),
             ),
           );
@@ -139,12 +164,14 @@ class _FileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final borderColor = isSelected
-        ? Theme.of(context).colorScheme.primary
-        : Theme.of(context).dividerColor.withValues(alpha: 0.4);
+        ? theme.colorScheme.primary
+        : theme.dividerColor.withValues(alpha: 0.4);
+    final cardColor = theme.colorScheme.surface;
 
     return Material(
-      color: Colors.white,
+      color: cardColor,
       borderRadius: BorderRadius.circular(12),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -170,7 +197,7 @@ class _FileCard extends StatelessWidget {
                       file.filename,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
+                      style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
                     ),
                     if (_hasSecondaryLabel(file)) ...[
                       const SizedBox(height: 4),
@@ -178,13 +205,13 @@ class _FileCard extends StatelessWidget {
                         file.displayTitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
+                        style: theme.textTheme.bodySmall,
                       ),
                     ],
                     const SizedBox(height: 4),
                     Text(
                       '${_formatModified(file.mtime)} · ${_formatSize(file.size)}',
-                      style: Theme.of(context).textTheme.bodySmall,
+                      style: theme.textTheme.bodySmall,
                     ),
                   ],
                 ),
@@ -212,9 +239,10 @@ class _Thumbnail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     if (path == null) {
       return Container(
-        color: Colors.grey.shade200,
+        color: theme.colorScheme.surfaceContainerHighest,
         child: const Center(
           child: Icon(Icons.image_not_supported_outlined, size: 48),
         ),
@@ -224,7 +252,7 @@ class _Thumbnail extends StatelessWidget {
     final file = File(path!);
     if (!file.existsSync()) {
       return Container(
-        color: Colors.grey.shade100,
+        color: theme.colorScheme.surfaceContainerHighest,
         child: const Center(
           child: Icon(Icons.image_outlined, size: 48),
         ),
@@ -250,18 +278,53 @@ class _GridFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       height: 40,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       alignment: Alignment.centerLeft,
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        border: Border(top: BorderSide(color: Colors.grey.shade300)),
+        color: theme.colorScheme.surface,
+        border: Border(
+          top: BorderSide(
+            color: theme.dividerColor.withValues(alpha: 0.4),
+          ),
+        ),
       ),
       child: Text(
         selected > 0
             ? '$selected selected · $total total'
             : '$total item${total == 1 ? '' : 's'}',
+        style: theme.textTheme.bodyMedium,
+      ),
+    );
+  }
+}
+
+class _IndexingPlaceholder extends StatelessWidget {
+  const _IndexingPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 36,
+            height: 36,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              valueColor: AlwaysStoppedAnimation(theme.colorScheme.primary),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Indexing files…',
+            style: theme.textTheme.bodyMedium,
+          ),
+        ],
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_cube/flutter_cube.dart';
+import 'package:transparent_image/transparent_image.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/db.dart';
@@ -135,6 +136,8 @@ class _DetailsPanelState extends ConsumerState<DetailsPanel> {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
+          const SizedBox(height: 16),
+          _PreviewImage(path: record.thumbPath),
           const SizedBox(height: 16),
           Expanded(
             child: Form(
@@ -463,6 +466,7 @@ class _DetailsPanelState extends ConsumerState<DetailsPanel> {
       final activeFolder = browserState.activeFolder;
       final includeSubfolders = browserState.includeSubfolders;
       final sort = browserState.sort;
+      final searchExclude = browserState.searchExclude;
       ref.invalidate(fileByIdProvider(record.id));
       ref.invalidate(
         filesInFolderProvider(
@@ -472,6 +476,7 @@ class _DetailsPanelState extends ConsumerState<DetailsPanel> {
             search: search,
             includeSubfolders: includeSubfolders,
             sort: sort,
+            searchExclude: searchExclude,
           ),
         ),
       );
@@ -511,6 +516,7 @@ class _DetailsPanelState extends ConsumerState<DetailsPanel> {
       final search = browserState.searchQuery;
       final includeSubfolders = browserState.includeSubfolders;
       final sort = browserState.sort;
+      final searchExclude = browserState.searchExclude;
       final currentProject = ref
           .read(settingsControllerProvider)
           .maybeWhen(data: (value) => value.activeProjectPath, orElse: () => null);
@@ -523,6 +529,7 @@ class _DetailsPanelState extends ConsumerState<DetailsPanel> {
             search: search,
             includeSubfolders: includeSubfolders,
             sort: sort,
+            searchExclude: searchExclude,
           )),
         );
       }
@@ -744,6 +751,41 @@ class _MeshViewerSectionState extends State<_MeshViewerSection> {
               child: const CircularProgressIndicator(),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _PreviewImage extends StatelessWidget {
+  const _PreviewImage({this.path});
+
+  final String? path;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final borderColor = theme.dividerColor.withValues(alpha: 0.4);
+    return AspectRatio(
+      aspectRatio: 4 / 3,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            border: Border.all(color: borderColor),
+          ),
+          child: path != null && File(path!).existsSync()
+              ? FadeInImage(
+                  image: FileImage(File(path!)),
+                  placeholder: MemoryImage(kTransparentImage),
+                  fit: BoxFit.cover,
+                )
+              : Container(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  alignment: Alignment.center,
+                  child: const Icon(Icons.image_outlined, size: 48),
+                ),
+        ),
       ),
     );
   }

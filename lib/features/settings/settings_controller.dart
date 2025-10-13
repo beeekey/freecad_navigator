@@ -26,6 +26,7 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     final rootsJson = raw['project_roots'];
     final activeProjectPath = raw['active_project_path'];
     final freecadExecutable = raw['freecad_executable'];
+    final themePreferenceValue = raw['theme_preference'];
 
     final projectRoots = <ProjectRoot>[];
     if (rootsJson != null && rootsJson.isNotEmpty) {
@@ -45,6 +46,7 @@ class SettingsController extends AsyncNotifier<SettingsState> {
               ? projectRoots.first.path
               : null,
       freecadExecutable: freecadExecutable,
+      themePreference: ThemePreferenceX.fromStorage(themePreferenceValue),
     );
 
     if (state.projectRoots.isEmpty) {
@@ -154,6 +156,14 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     await _persistSetting('freecad_executable', path);
     state = AsyncValue.data(
       current.copyWith(freecadExecutable: path),
+    );
+  }
+
+  Future<void> updateThemePreference(ThemePreference preference) async {
+    final current = await future;
+    await _persistSetting('theme_preference', preference.storageValue);
+    state = AsyncValue.data(
+      current.copyWith(themePreference: preference),
     );
   }
 

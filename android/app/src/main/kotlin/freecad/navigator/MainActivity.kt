@@ -1,4 +1,4 @@
-package com.example.freecad_navigator
+package freecad.navigator
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -7,7 +7,14 @@ import '../../models/file_record.dart';
 import '../settings/settings_controller.dart';
 import 'browser_controller.dart';
 
-typedef FolderQuery = ({String projectRoot, String folder, String search, bool includeSubfolders, BrowserSort sort});
+typedef FolderQuery = ({
+  String projectRoot,
+  String folder,
+  String search,
+  bool includeSubfolders,
+  BrowserSort sort,
+  bool searchExclude,
+});
 
 final activeProjectPathProvider = Provider<String?>((ref) {
   final settings = ref.watch(settingsControllerProvider);
@@ -90,10 +97,11 @@ final filesInFolderProvider =
           record.sidecarMeta['CreatedBy'],
           record.builtinMeta['CreatedBy'],
         ];
-        return fields
+        final matches = fields
             .whereType<String>()
             .map((value) => value.toLowerCase())
             .any((value) => value.contains(keyword));
+        return args.searchExclude ? !matches : matches;
       }).toList();
       filtered.sort((a, b) => _compareRecords(a, b, args.sort));
       return filtered;

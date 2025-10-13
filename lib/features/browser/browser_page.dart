@@ -13,6 +13,7 @@ import 'file_grid.dart';
 import 'file_preview_list.dart';
 import 'folder_tree.dart';
 import 'search_bar.dart';
+import 'package:path/path.dart' as p;
 
 class BrowserPage extends ConsumerStatefulWidget {
   const BrowserPage({super.key});
@@ -30,51 +31,15 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
     final reloadToken = ref.watch(filesReloadSignalProvider);
     final includeSubfolders = browserState.includeSubfolders;
 
-    final settingsValue = settingsAsync.asData?.value;
     final appBarTitle = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        Image.asset(
+          'assets/images/FreeCadExplorer_Logo.png',
+          height: 34,
+        ),
+        const SizedBox(width: 8),
         const Text('FreeCAD Explorer'),
-        if (settingsValue != null && settingsValue.hasProjects) ...[
-          const SizedBox(width: 12),
-          Builder(builder: (context) {
-            final selectedPath = settingsValue.activeProjectPath ??
-                (settingsValue.projectRoots.isNotEmpty
-                    ? settingsValue.projectRoots.first.path
-                    : null);
-            return ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 320),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: selectedPath,
-                  isExpanded: true,
-                  isDense: true,
-                  style: Theme.of(context).textTheme.titleMedium,
-                  onChanged: (value) {
-                    if (value != null) {
-                      ref
-                          .read(settingsControllerProvider.notifier)
-                          .setActiveProject(value);
-                    }
-                  },
-                  items: settingsValue.projectRoots
-                      .map(
-                        (root) => DropdownMenuItem<String>(
-                          value: root.path,
-                          child: Text(
-                            root.label?.isNotEmpty == true
-                                ? root.label!
-                                : root.path,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-            );
-          }),
-        ],
       ],
     );
 
@@ -105,10 +70,82 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
             children: [
               SizedBox(
                 width: 280,
-                child: FolderTree(
-                  projectRoot: settings.activeProject?.path ?? '',
-                  activeFolder: browserState.activeFolder,
-                  refreshToken: reloadToken,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: 'Project',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            isExpanded: true,
+                            dropdownColor: Theme.of(context).colorScheme.primaryContainer,
+                            selectedItemBuilder: (context) {
+                              final theme = Theme.of(context);
+                              return settings.projectRoots.map((root) {
+                                final label = root.label?.isNotEmpty == true
+                                    ? root.label!
+                                    : p.basename(root.path);
+                                return Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    label,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: theme.colorScheme.primary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                );
+                              }).toList();
+                            },
+                            value: settings.activeProject?.path,
+                            onChanged: (value) {
+                              if (value != null) {
+                                ref.read(settingsControllerProvider.notifier).setActiveProject(value);
+                              }
+                            },
+                            items: settings.projectRoots
+                                .map(
+                                  (root) => DropdownMenuItem<String>(
+                                    value: root.path,
+                                    child: Text(
+                                      root.label?.isNotEmpty == true
+                                          ? root.label!
+                                          : p.basename(root.path),
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            icon: Icon(
+                              Icons.arrow_drop_down,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: FolderTree(
+                        projectRoot: settings.activeProject?.path ?? '',
+                        activeFolder: browserState.activeFolder,
+                        refreshToken: reloadToken,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const VerticalDivider(width: 1),
@@ -119,6 +156,25 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       child: Row(
                         children: [
+                          IconButton(
+                            tooltip: browserState.searchExclude
+                                ? 'Exclude search term'
+                                : 'Include search term',
+                            onPressed: browserState.searchQuery.isEmpty
+                                ? null
+                                : () => ref
+                                    .read(browserControllerProvider.notifier)
+                                    .toggleSearchExclude(),
+                            color: browserState.searchExclude
+                                ? Theme.of(context).colorScheme.primary
+                                : null,
+                            icon: Icon(
+                              browserState.searchExclude
+                                  ? Icons.priority_high
+                                  : Icons.priority_high_outlined,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
                           Expanded(
                             child: BrowserSearchBar(
                               initialText: browserState.searchQuery,
@@ -229,6 +285,8 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
                               includeSubfolders: includeSubfolders,
                               selection: browserState.selectedFileIds,
                               sort: browserState.sort,
+                              searchExclude: browserState.searchExclude,
+                              isIndexing: isIndexing,
                               onOpenFile: (record) => _openInFreecad(context, settings.freecadExecutable, record),
                             )
                           : FilePreviewList(
@@ -236,7 +294,9 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
                               folder: browserState.activeFolder,
                               includeSubfolders: includeSubfolders,
                               sort: browserState.sort,
+                              searchExclude: browserState.searchExclude,
                               selection: browserState.selectedFileIds,
+                              isIndexing: isIndexing,
                               onTap: (record) => ref.read(browserControllerProvider.notifier).toggleSelection(record),
                               onOpen: (record) => _openInFreecad(context, settings.freecadExecutable, record),
                             ),

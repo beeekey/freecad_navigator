@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>freecad.navigator</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>FreeCAD Navigator</name>
+  <summary>Browse and manage FreeCAD project assets</summary>
+  <description>
+    <p>FreeCAD Navigator is a lightweight manager for browsing, indexing, and launching FreeCAD project files.</p>
+  </description>
+  <launchable type="desktop-id">freecad_navigator.desktop</launchable>
+  <provides>
+    <binary>freecad_navigator</binary>
+  </provides>
+  <categories>
+    <category>Graphics</category>
+    <category>Utility</category>
+  </categories>
+  <developer_name>FreeCAD Navigator</developer_name>
+</component>
