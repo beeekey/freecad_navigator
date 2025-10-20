@@ -53,21 +53,131 @@ def log(message):
 os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
 
 doc = None
+open_warnings = []
+
+def wait_for_gui_document(doc_name, timeout=5.0, poll_interval=0.1):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            gui_doc = Gui.activeDocument()
+            if gui_doc is not None:
+                return gui_doc
+        except Exception:
+            pass
+
+        try:
+            candidate = Gui.getDocument(doc_name)
+        except Exception:
+            candidate = None
+
+        if candidate is not None:
+            try:
+                candidate.mdiActivate()
+            except Exception:
+                try:
+                    Gui.activateDocument(doc_name)
+                except Exception:
+                    try:
+                        Gui.setActiveDocument(doc_name)
+                    except Exception:
+                        pass
+
+        Gui.updateGui()
+        time.sleep(poll_interval)
+
+    try:
+        gui_doc = Gui.activeDocument()
+        if gui_doc is not None:
+            return gui_doc
+    except Exception:
+        pass
+
+    try:
+        return Gui.getDocument(doc_name)
+    except Exception:
+        return None
+
+def wait_for_view(gui_doc, timeout=5.0, poll_interval=0.1):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            view = gui_doc.activeView()
+            if view is not None:
+                return view
+        except Exception:
+            pass
+
+        try:
+            active_doc = Gui.activeDocument()
+            if active_doc is not None:
+                view = active_doc.activeView()
+                if view is not None:
+                    return view
+        except Exception:
+            pass
+
+        Gui.updateGui()
+        time.sleep(poll_interval)
+
+    return None
 
 try:
-    log(f"Opening document: {INPUT_PATH}")
-    doc = FreeCAD.open(INPUT_PATH)
     Gui.showMainWindow()
-    Gui.activateWorkbench("PartWorkbench")
     Gui.updateGui()
-    time.sleep(0.1)
+    time.sleep(0.2)
 
-    gui_doc = Gui.activeDocument()
+    log(f"Opening document: {INPUT_PATH}")
+    try:
+        doc = FreeCAD.openDocument(INPUT_PATH)
+    except Exception as exc:
+        open_warnings.append(f"FreeCAD.openDocument failed: {exc}")
+        try:
+            doc = FreeCAD.open(INPUT_PATH)
+        except Exception as exc2:
+            open_warnings.append(f"FreeCAD.open failed: {exc2}")
+            doc = None
+
+    if doc is None:
+        if open_warnings:
+            sys.stderr.write("\\n".join(open_warnings) + "\\n")
+        sys.stderr.write("Document could not be opened.\\n")
+        sys.exit(6)
+
+    try:
+        FreeCAD.setActiveDocument(doc.Name)
+    except Exception:
+        pass
+
+    try:
+        FreeCAD.ActiveDocument = doc
+    except Exception:
+        pass
+
+    try:
+        Gui.activateDocument(doc.Name)
+    except Exception:
+        try:
+            Gui.setActiveDocument(doc.Name)
+        except Exception:
+            pass
+    Gui.updateGui()
+    time.sleep(0.2)
+
+    gui_doc = wait_for_gui_document(doc.Name, timeout=10.0)
     if gui_doc is None:
+        if open_warnings:
+            sys.stderr.write("\\n".join(open_warnings) + "\\n")
         sys.stderr.write("No active GUI document after opening file.\\n")
         sys.exit(3)
 
-    view = gui_doc.activeView()
+    try:
+        Gui.activateWorkbench("PartWorkbench")
+    except Exception as exc:
+        sys.stderr.write(f"activateWorkbench failed: {exc}\\n")
+    Gui.updateGui()
+    time.sleep(0.1)
+
+    view = wait_for_view(gui_doc, timeout=10.0)
     if view is None:
         sys.stderr.write("No active view available for document.\\n")
         sys.exit(4)

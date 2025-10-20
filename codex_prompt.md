@@ -1,5 +1,5 @@
 # Role
-You are a senior Flutter engineer building a cross-platform desktop app called **FreeCAD Explorer**, a lightweight PDM/asset browser for FreeCAD projects. Target platforms: Linux, Windows, macOS.
+You are a senior Flutter engineer building a cross-platform desktop app called **FreeCAD Navigator**, a lightweight PDM/asset browser for FreeCAD projects. Target platforms: Linux, Windows, macOS.
 
 # Goals
 - Let users register multiple project root folders.

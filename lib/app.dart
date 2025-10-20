@@ -39,7 +39,7 @@ class FreecadExplorerApp extends ConsumerWidget {
     );
 
     return MaterialApp.router(
-      title: 'FreeCAD Explorer',
+      title: 'FreeCAD Navigator',
       theme: _lightTheme,
       darkTheme: _darkTheme,
       themeMode: themeMode,

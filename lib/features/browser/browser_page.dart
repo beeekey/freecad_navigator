@@ -36,12 +36,9 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
     final appBarTitle = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Image.asset(
-          'assets/images/FreeCadExplorer_Logo.png',
-          height: 34,
-        ),
+        Image.asset('assets/images/FreeCadExplorer_Logo.png', height: 34),
         const SizedBox(width: 8),
-        const Text('FreeCAD Explorer'),
+        const Text('FreeCAD Navigator'),
       ],
     );
 
@@ -58,7 +55,8 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
       ),
       body: settingsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => _ErrorView(error: error, stackTrace: stackTrace),
+        error: (error, stackTrace) =>
+            _ErrorView(error: error, stackTrace: stackTrace),
         data: (settings) {
           final hasProjects = settings.hasProjects;
           final hasLibraries = settings.hasDefaultLibraries;
@@ -68,9 +66,12 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
           }
 
           var effectiveSource = browserState.source;
-          if (effectiveSource == BrowserNavigationSource.project && !hasProjects && hasLibraries) {
+          if (effectiveSource == BrowserNavigationSource.project &&
+              !hasProjects &&
+              hasLibraries) {
             effectiveSource = BrowserNavigationSource.defaultLibrary;
-          } else if (effectiveSource == BrowserNavigationSource.defaultLibrary &&
+          } else if (effectiveSource ==
+                  BrowserNavigationSource.defaultLibrary &&
               !hasLibraries &&
               hasProjects) {
             effectiveSource = BrowserNavigationSource.project;
@@ -89,8 +90,12 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
               : activeLibraryPath;
 
           final indexingState = indexingAsync.valueOrNull;
-          final isIndexing =
-              activeRoot.isNotEmpty ? indexingState?.isIndexing(activeRoot) ?? false : false;
+          final isIndexing = activeRoot.isNotEmpty
+              ? indexingState?.isIndexing(activeRoot) ?? false
+              : false;
+          final isGeneratingPreviews = activeRoot.isNotEmpty
+              ? indexingState?.isGeneratingPreviews(activeRoot) ?? false
+              : false;
 
           return Row(
             children: [
@@ -105,14 +110,20 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
                       labelText: 'Project',
                       emptyMessage: 'Add project roots in Settings.',
                       icon: Icons.folder_outlined,
-                      isExpanded: effectiveSource == BrowserNavigationSource.project,
+                      isExpanded:
+                          effectiveSource == BrowserNavigationSource.project,
                       roots: settings.projectRoots,
-                      activePath: activeProjectPath.isEmpty ? null : activeProjectPath,
-                      onTapHeader: () =>
-                          browserController.setNavigationSource(BrowserNavigationSource.project),
+                      activePath: activeProjectPath.isEmpty
+                          ? null
+                          : activeProjectPath,
+                      onTapHeader: () => browserController.setNavigationSource(
+                        BrowserNavigationSource.project,
+                      ),
                       onChanged: (value) {
                         if (value != null) {
-                          ref.read(settingsControllerProvider.notifier).setActiveProject(value);
+                          ref
+                              .read(settingsControllerProvider.notifier)
+                              .setActiveProject(value);
                         }
                       },
                     ),
@@ -131,24 +142,33 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
                       labelText: 'Default library',
                       emptyMessage: 'Add default libraries in Settings.',
                       icon: Icons.library_books_outlined,
-                      isExpanded: effectiveSource == BrowserNavigationSource.defaultLibrary,
+                      isExpanded:
+                          effectiveSource ==
+                          BrowserNavigationSource.defaultLibrary,
                       roots: settings.defaultLibraries,
-                      activePath: activeLibraryPath.isEmpty ? null : activeLibraryPath,
-                      onTapHeader: () =>
-                          browserController.setNavigationSource(BrowserNavigationSource.defaultLibrary),
+                      activePath: activeLibraryPath.isEmpty
+                          ? null
+                          : activeLibraryPath,
+                      onTapHeader: () => browserController.setNavigationSource(
+                        BrowserNavigationSource.defaultLibrary,
+                      ),
                       onChanged: (value) {
                         if (value != null) {
-                          ref.read(settingsControllerProvider.notifier).setActiveLibrary(value);
+                          ref
+                              .read(settingsControllerProvider.notifier)
+                              .setActiveLibrary(value);
                         }
                       },
                     ),
-                    if (effectiveSource == BrowserNavigationSource.defaultLibrary)
+                    if (effectiveSource ==
+                        BrowserNavigationSource.defaultLibrary)
                       Expanded(
                         child: FolderTree(
                           projectRoot: activeLibraryPath,
                           activeFolder: browserState.libraryFolder,
                           refreshToken: reloadToken,
-                          emptyPlaceholder: 'Select a default library to view folders.',
+                          emptyPlaceholder:
+                              'Select a default library to view folders.',
                         ),
                       ),
                   ],
@@ -159,7 +179,10 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
                 child: Column(
                   children: [
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                       child: Row(
                         children: [
                           IconButton(
@@ -169,8 +192,8 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
                             onPressed: browserState.searchQuery.isEmpty
                                 ? null
                                 : () => ref
-                                    .read(browserControllerProvider.notifier)
-                                    .toggleSearchExclude(),
+                                      .read(browserControllerProvider.notifier)
+                                      .toggleSearchExclude(),
                             color: browserState.searchExclude
                                 ? Theme.of(context).colorScheme.primary
                                 : null,
@@ -193,36 +216,38 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
                           SizedBox(
                             width: 160,
                             child: DropdownButtonFormField<BrowserSort>(
-                                initialValue: browserState.sort,
-                                decoration: const InputDecoration(
-                                  labelText: 'Sort',
-                                  isDense: true,
-                                  border: OutlineInputBorder(),
-                                ),
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    ref.read(browserControllerProvider.notifier).setSortOption(value);
-                                  }
-                                },
-                                items: const [
-                                  DropdownMenuItem(
-                                    value: BrowserSort.nameAsc,
-                                    child: Text('Name ↑'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: BrowserSort.nameDesc,
-                                    child: Text('Name ↓'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: BrowserSort.dateDesc,
-                                    child: Text('Modified ↓'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: BrowserSort.dateAsc,
-                                    child: Text('Modified ↑'),
-                                  ),
-                                ],
+                              initialValue: browserState.sort,
+                              decoration: const InputDecoration(
+                                labelText: 'Sort',
+                                isDense: true,
+                                border: OutlineInputBorder(),
                               ),
+                              onChanged: (value) {
+                                if (value != null) {
+                                  ref
+                                      .read(browserControllerProvider.notifier)
+                                      .setSortOption(value);
+                                }
+                              },
+                              items: const [
+                                DropdownMenuItem(
+                                  value: BrowserSort.nameAsc,
+                                  child: Text('Name ↑'),
+                                ),
+                                DropdownMenuItem(
+                                  value: BrowserSort.nameDesc,
+                                  child: Text('Name ↓'),
+                                ),
+                                DropdownMenuItem(
+                                  value: BrowserSort.dateDesc,
+                                  child: Text('Modified ↓'),
+                                ),
+                                DropdownMenuItem(
+                                  value: BrowserSort.dateAsc,
+                                  child: Text('Modified ↑'),
+                                ),
+                              ],
+                            ),
                           ),
                           const SizedBox(width: 12),
                           ToggleButtons(
@@ -234,7 +259,9 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
                               final mode = index == 0
                                   ? BrowserViewMode.grid
                                   : BrowserViewMode.list;
-                              ref.read(browserControllerProvider.notifier).setViewMode(mode);
+                              ref
+                                  .read(browserControllerProvider.notifier)
+                                  .setViewMode(mode);
                             },
                             borderRadius: BorderRadius.circular(8),
                             children: const [
@@ -269,18 +296,52 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
                           ),
                           const SizedBox(width: 12),
                           IconButton.filledTonal(
-                            tooltip: 'Refresh index',
-                            onPressed: activeRoot.isEmpty || isIndexing
+                            tooltip: isIndexing
+                                ? 'Indexing in progress'
+                                : 'Refresh index',
+                            onPressed:
+                                activeRoot.isEmpty ||
+                                    isIndexing ||
+                                    isGeneratingPreviews
                                 ? null
                                 : () => ref
-                                    .read(indexingControllerProvider.notifier)
-                                    .ensureIndexed(activeRoot),
+                                      .read(indexingControllerProvider.notifier)
+                                      .ensureIndexed(activeRoot),
                             icon: const Icon(Icons.refresh),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton.filledTonal(
+                            tooltip: isGeneratingPreviews
+                                ? 'Generating previews…'
+                                : 'Generate missing previews',
+                            onPressed:
+                                activeRoot.isEmpty ||
+                                    isIndexing ||
+                                    isGeneratingPreviews ||
+                                    (settings.freecadExecutable == null ||
+                                        settings.freecadExecutable!.isEmpty)
+                                ? null
+                                : () {
+                                    _generateMissingPreviews(
+                                      context,
+                                      activeRoot,
+                                      settings.freecadExecutable!,
+                                    );
+                                  },
+                            icon: isGeneratingPreviews
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.auto_awesome),
                           ),
                         ],
                       ),
                     ),
-                    if (isIndexing)
+                    if (isIndexing || isGeneratingPreviews)
                       const LinearProgressIndicator(minHeight: 2),
                     const Divider(height: 1),
                     Expanded(
@@ -292,8 +353,12 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
                               selection: browserState.selectedFileIds,
                               sort: browserState.sort,
                               searchExclude: browserState.searchExclude,
-                              isIndexing: isIndexing,
-                              onOpenFile: (record) => _openInFreecad(context, settings.freecadExecutable, record),
+                              isIndexing: isIndexing || isGeneratingPreviews,
+                              onOpenFile: (record) => _openInFreecad(
+                                context,
+                                settings.freecadExecutable,
+                                record,
+                              ),
                             )
                           : FilePreviewList(
                               projectRoot: activeRoot,
@@ -302,9 +367,15 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
                               sort: browserState.sort,
                               searchExclude: browserState.searchExclude,
                               selection: browserState.selectedFileIds,
-                              isIndexing: isIndexing,
-                              onTap: (record) => ref.read(browserControllerProvider.notifier).toggleSelection(record),
-                              onOpen: (record) => _openInFreecad(context, settings.freecadExecutable, record),
+                              isIndexing: isIndexing || isGeneratingPreviews,
+                              onTap: (record) => ref
+                                  .read(browserControllerProvider.notifier)
+                                  .toggleSelection(record),
+                              onOpen: (record) => _openInFreecad(
+                                context,
+                                settings.freecadExecutable,
+                                record,
+                              ),
                             ),
                     ),
                   ],
@@ -341,10 +412,12 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
     final hasRoots = roots.isNotEmpty;
     final resolvedActivePath = hasRoots
         ? (activePath != null && roots.any((root) => root.path == activePath)
-            ? activePath
-            : roots.first.path)
+              ? activePath
+              : roots.first.path)
         : null;
-    final headerColor = isExpanded ? theme.colorScheme.primary : theme.textTheme.titleSmall?.color;
+    final headerColor = isExpanded
+        ? theme.colorScheme.primary
+        : theme.textTheme.titleSmall?.color;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -385,7 +458,10 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
                 labelText: labelText,
                 border: const OutlineInputBorder(),
                 isDense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
@@ -444,10 +520,7 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
                 ),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(
-                emptyMessage,
-                style: theme.textTheme.bodySmall,
-              ),
+              child: Text(emptyMessage, style: theme.textTheme.bodySmall),
             ),
         ],
       ),
@@ -459,6 +532,59 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
       return root.label!;
     }
     return p.basename(root.path);
+  }
+
+  Future<void> _generateMissingPreviews(
+    BuildContext context,
+    String rootPath,
+    String executable,
+  ) async {
+    try {
+      final result = await ref
+          .read(indexingControllerProvider.notifier)
+          .generateMissingPreviews(
+            projectRoot: rootPath,
+            freecadExecutable: executable,
+          );
+      if (!context.mounted) return;
+
+      if (result.attempted == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('All files already have previews.')),
+        );
+        return;
+      }
+
+      final parts = <String>[];
+      if (result.generated > 0) {
+        parts.add(
+          'Generated previews for ${result.generated} file${result.generated == 1 ? '' : 's'}',
+        );
+      }
+      if (result.removed > 0) {
+        parts.add(
+          'Removed ${result.removed} missing file${result.removed == 1 ? '' : 's'}',
+        );
+      }
+      if (result.failed > 0) {
+        parts.add(
+          'Failed on ${result.failed} file${result.failed == 1 ? '' : 's'}',
+        );
+      }
+
+      final message = parts.isEmpty
+          ? 'No previews generated.'
+          : parts.join(' • ');
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Preview generation failed: $error')),
+      );
+    }
   }
 }
 
@@ -516,26 +642,26 @@ class _ErrorView extends StatelessWidget {
     );
   }
 }
-  Future<void> _openInFreecad(
-    BuildContext context,
-    String? executable,
-    FileRecord record,
-  ) async {
-    if (executable == null || executable.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Set the FreeCAD executable in Settings first.')),
-      );
-      return;
-    }
-    try {
-      await openInFreecad(
-        executable: executable,
-        files: [record.path],
-      );
-    } catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to open file in FreeCAD: $error')),
-      );
-    }
+
+Future<void> _openInFreecad(
+  BuildContext context,
+  String? executable,
+  FileRecord record,
+) async {
+  if (executable == null || executable.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Set the FreeCAD executable in Settings first.'),
+      ),
+    );
+    return;
   }
+  try {
+    await openInFreecad(executable: executable, files: [record.path]);
+  } catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Failed to open file in FreeCAD: $error')),
+    );
+  }
+}

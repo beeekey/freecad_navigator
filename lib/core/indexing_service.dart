@@ -19,26 +19,39 @@ import 'reload_signal.dart';
 
 final indexingControllerProvider =
     AsyncNotifierProvider<IndexingController, IndexingState>(
-  IndexingController.new,
-);
+      IndexingController.new,
+    );
+
+typedef PreviewBatchResult = ({
+  int attempted,
+  int generated,
+  int removed,
+  int failed,
+});
 
 class IndexingState {
   const IndexingState({
     Set<String>? rootsInProgress,
+    Set<String>? previewsInProgress,
     this.lastIndexedAt,
-  }) : rootsInProgress = rootsInProgress ?? const {};
+  }) : rootsInProgress = rootsInProgress ?? const {},
+       previewsInProgress = previewsInProgress ?? const {};
 
   final Set<String> rootsInProgress;
+  final Set<String> previewsInProgress;
   final DateTime? lastIndexedAt;
 
   bool isIndexing(String root) => rootsInProgress.contains(root);
+  bool isGeneratingPreviews(String root) => previewsInProgress.contains(root);
 
   IndexingState copyWith({
     Set<String>? rootsInProgress,
+    Set<String>? previewsInProgress,
     DateTime? lastIndexedAt,
   }) {
     return IndexingState(
       rootsInProgress: rootsInProgress ?? this.rootsInProgress,
+      previewsInProgress: previewsInProgress ?? this.previewsInProgress,
       lastIndexedAt: lastIndexedAt ?? this.lastIndexedAt,
     );
   }
@@ -52,6 +65,7 @@ class IndexingController extends AsyncNotifier<IndexingState> {
   final Map<String, StreamSubscription<WatchEvent>> _watchers = {};
   final Map<String, Timer> _debounceTimers = {};
   final Map<String, Future<void>> _scansInFlight = {};
+  final Map<String, Future<PreviewBatchResult>> _previewJobsInFlight = {};
 
   @override
   Future<IndexingState> build() async {
@@ -59,16 +73,12 @@ class IndexingController extends AsyncNotifier<IndexingState> {
     _dirs = await ref.watch(appDirectoriesProvider.future);
     _metadataRepository = MetadataRepository(_db);
 
-    ref.listen<AsyncValue<SettingsState>>(
-      settingsControllerProvider,
-      (previous, next) {
-        _handleSettingsChange(
-          previous?.valueOrNull,
-          next.valueOrNull,
-        );
-      },
-      fireImmediately: true,
-    );
+    ref.listen<AsyncValue<SettingsState>>(settingsControllerProvider, (
+      previous,
+      next,
+    ) {
+      _handleSettingsChange(previous?.valueOrNull, next.valueOrNull);
+    }, fireImmediately: true);
 
     ref.onDispose(() async {
       for (final entry in _watchers.entries) {
@@ -84,10 +94,7 @@ class IndexingController extends AsyncNotifier<IndexingState> {
     return const IndexingState();
   }
 
-  void _handleSettingsChange(
-    SettingsState? previous,
-    SettingsState? next,
-  ) {
+  void _handleSettingsChange(SettingsState? previous, SettingsState? next) {
     final previousRoots = {
       if (previous != null) ...previous.projectRoots.map((r) => r.path),
       if (previous != null) ...previous.defaultLibraries.map((r) => r.path),
@@ -202,13 +209,13 @@ class IndexingController extends AsyncNotifier<IndexingState> {
     Map<String, String> sidecar,
   ) async {
     final folderPath = p.normalize(
-      p.relative(
-        p.dirname(result.path),
-        from: projectRoot,
-      ),
+      p.relative(p.dirname(result.path), from: projectRoot),
     );
-    final normalizedFolder =
-        folderPath == '.' ? '' : folderPath == '..' ? '' : folderPath;
+    final normalizedFolder = folderPath == '.'
+        ? ''
+        : folderPath == '..'
+        ? ''
+        : folderPath;
 
     final filename = p.basename(result.path);
     final ext = p.extension(result.path).replaceFirst('.', '').toUpperCase();
@@ -248,7 +255,11 @@ class IndexingController extends AsyncNotifier<IndexingState> {
           where: 'id = ?',
           whereArgs: [fileId],
         );
-        await txn.delete('file_meta', where: 'file_id = ?', whereArgs: [fileId]);
+        await txn.delete(
+          'file_meta',
+          where: 'file_id = ?',
+          whereArgs: [fileId],
+        );
       }
 
       for (final entry in result.metadata.entries) {
@@ -278,7 +289,11 @@ class IndexingController extends AsyncNotifier<IndexingState> {
     final fileId = existing.first['id'] as int;
 
     await runInTransaction(_db, (txn) async {
-      await txn.delete('file_meta_sidecar', where: 'file_id = ?', whereArgs: [fileId]);
+      await txn.delete(
+        'file_meta_sidecar',
+        where: 'file_id = ?',
+        whereArgs: [fileId],
+      );
       for (final entry in sidecar.entries) {
         await txn.insert('file_meta_sidecar', {
           'file_id': fileId,
@@ -346,13 +361,10 @@ class IndexingController extends AsyncNotifier<IndexingState> {
     void schedule(void Function() callback) {
       final existing = _debounceTimers.remove(resolved);
       existing?.cancel();
-      _debounceTimers[resolved] = Timer(
-        const Duration(milliseconds: 400),
-        () {
-          _debounceTimers.remove(resolved);
-          callback();
-        },
-      );
+      _debounceTimers[resolved] = Timer(const Duration(milliseconds: 400), () {
+        _debounceTimers.remove(resolved);
+        callback();
+      });
     }
 
     final lower = resolved.toLowerCase();
@@ -364,7 +376,10 @@ class IndexingController extends AsyncNotifier<IndexingState> {
         schedule(() => reindexFile(projectRoot, resolved));
       }
     } else if (lower.endsWith('.fcmeta.json')) {
-      final target = resolved.substring(0, resolved.length - '.fcmeta.json'.length);
+      final target = resolved.substring(
+        0,
+        resolved.length - '.fcmeta.json'.length,
+      );
       schedule(() async {
         if (await File(target).exists()) {
           await reindexFile(projectRoot, target);
@@ -393,7 +408,11 @@ class IndexingController extends AsyncNotifier<IndexingState> {
   }
 
   Future<void> _purgeProject(String projectRoot) async {
-    await _db.delete('files', where: 'project_root = ?', whereArgs: [projectRoot]);
+    await _db.delete(
+      'files',
+      where: 'project_root = ?',
+      whereArgs: [projectRoot],
+    );
     _triggerReload();
   }
 
@@ -403,9 +422,7 @@ class IndexingController extends AsyncNotifier<IndexingState> {
 
   void _updateLastIndexed() {
     final current = state.value ?? const IndexingState();
-    state = AsyncValue.data(
-      current.copyWith(lastIndexedAt: DateTime.now()),
-    );
+    state = AsyncValue.data(current.copyWith(lastIndexedAt: DateTime.now()));
   }
 
   void _setRootIndexing(String root, bool indexing) {
@@ -416,9 +433,18 @@ class IndexingController extends AsyncNotifier<IndexingState> {
     } else {
       updated.remove(root);
     }
-    state = AsyncValue.data(
-      current.copyWith(rootsInProgress: updated),
-    );
+    state = AsyncValue.data(current.copyWith(rootsInProgress: updated));
+  }
+
+  void _setPreviewGenerating(String root, bool generating) {
+    final current = state.value ?? const IndexingState();
+    final updated = <String>{...current.previewsInProgress};
+    if (generating) {
+      updated.add(root);
+    } else {
+      updated.remove(root);
+    }
+    state = AsyncValue.data(current.copyWith(previewsInProgress: updated));
   }
 
   Future<String> generatePreviewFor(
@@ -434,17 +460,86 @@ class IndexingController extends AsyncNotifier<IndexingState> {
     final now = DateTime.now().millisecondsSinceEpoch;
     await _db.update(
       'files',
-      {
-        'has_thumbnail': 1,
-        'thumb_path': outputPath,
-        'last_indexed': now,
-      },
+      {'has_thumbnail': 1, 'thumb_path': outputPath, 'last_indexed': now},
       where: 'id = ?',
       whereArgs: [record.id],
     );
 
     _triggerReload();
     return outputPath;
+  }
+
+  Future<PreviewBatchResult> generateMissingPreviews({
+    required String projectRoot,
+    required String freecadExecutable,
+  }) {
+    if (projectRoot.isEmpty) {
+      return Future.value((attempted: 0, generated: 0, removed: 0, failed: 0));
+    }
+    final normalizedRoot = p.normalize(projectRoot);
+    if (_previewJobsInFlight.containsKey(normalizedRoot)) {
+      return _previewJobsInFlight[normalizedRoot]!;
+    }
+    final future = _generateMissingPreviewsForRoot(
+      normalizedRoot,
+      freecadExecutable,
+    );
+    _previewJobsInFlight[normalizedRoot] = future;
+    future.whenComplete(() => _previewJobsInFlight.remove(normalizedRoot));
+    return future;
+  }
+
+  Future<PreviewBatchResult> _generateMissingPreviewsForRoot(
+    String normalizedRoot,
+    String freecadExecutable,
+  ) async {
+    final rows = await _db.query(
+      'files',
+      where: 'project_root = ? AND has_thumbnail = 0',
+      whereArgs: [normalizedRoot],
+      orderBy: 'path COLLATE NOCASE',
+    );
+
+    final attempted = rows.length;
+    if (attempted == 0) {
+      return (attempted: 0, generated: 0, removed: 0, failed: 0);
+    }
+
+    _setPreviewGenerating(normalizedRoot, true);
+
+    var generated = 0;
+    var failed = 0;
+    var removed = 0;
+
+    try {
+      for (final row in rows) {
+        final record = FileRecord.fromRow(row);
+        final file = File(record.path);
+        if (!await file.exists()) {
+          removed++;
+          await _removeFile(record.path);
+          continue;
+        }
+        try {
+          await generatePreviewFor(record, freecadExecutable);
+          generated++;
+        } catch (error, stack) {
+          failed++;
+          debugPrint(
+            'Failed to generate preview for ${record.path}: $error\n$stack',
+          );
+        }
+      }
+    } finally {
+      _setPreviewGenerating(normalizedRoot, false);
+    }
+
+    return (
+      attempted: attempted,
+      generated: generated,
+      removed: removed,
+      failed: failed,
+    );
   }
 
   String _deriveTitle(

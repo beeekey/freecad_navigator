@@ -9,8 +9,8 @@ import '../../models/settings_model.dart';
 
 final settingsControllerProvider =
     AsyncNotifierProvider<SettingsController, SettingsState>(
-  SettingsController.new,
-);
+      SettingsController.new,
+    );
 
 class SettingsController extends AsyncNotifier<SettingsState> {
   late Database _db;
@@ -20,7 +20,7 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     _db = await ref.watch(databaseProvider.future);
     final records = await _db.query('settings');
     final Map<String, String?> raw = {
-      for (final row in records) row['key'] as String: row['value'] as String?
+      for (final row in records) row['key'] as String: row['value'] as String?,
     };
 
     final rootsJson = raw['project_roots'];
@@ -29,6 +29,7 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     final activeLibraryPath = raw['active_library_path'];
     final freecadExecutable = raw['freecad_executable'];
     final themePreferenceValue = raw['theme_preference'];
+    final folderFavoritesJson = raw['folder_favorites'];
 
     final projectRoots = <ProjectRoot>[];
     if (rootsJson != null && rootsJson.isNotEmpty) {
@@ -50,33 +51,50 @@ class SettingsController extends AsyncNotifier<SettingsState> {
       }
     }
 
+    final folderFavorites = <String, List<String>>{};
+    if (folderFavoritesJson != null && folderFavoritesJson.isNotEmpty) {
+      final parsed = jsonDecode(folderFavoritesJson) as Map<String, dynamic>;
+      parsed.forEach((key, value) {
+        final normalizedKey = p.normalize(key);
+        folderFavorites[normalizedKey] = List<String>.from(
+          (value as List).map((item) => item as String),
+        );
+      });
+    }
+
     final state = SettingsState(
       projectRoots: projectRoots,
       defaultLibraries: defaultLibraries,
       activeProjectPath: projectRoots.any((e) => e.path == activeProjectPath)
           ? activeProjectPath
           : projectRoots.isNotEmpty
-              ? projectRoots.first.path
-              : null,
-      activeLibraryPath: defaultLibraries.any((e) => e.path == activeLibraryPath)
+          ? projectRoots.first.path
+          : null,
+      activeLibraryPath:
+          defaultLibraries.any((e) => e.path == activeLibraryPath)
           ? activeLibraryPath
           : defaultLibraries.isNotEmpty
-              ? defaultLibraries.first.path
-              : null,
+          ? defaultLibraries.first.path
+          : null,
       freecadExecutable: freecadExecutable,
       themePreference: ThemePreferenceX.fromStorage(themePreferenceValue),
+      folderFavorites: folderFavorites,
     );
 
     SettingsState nextState = state;
 
     if (state.projectRoots.isNotEmpty && state.activeProjectPath == null) {
       await _persistActiveProject(state.projectRoots.first.path);
-      nextState = nextState.copyWith(activeProjectPath: state.projectRoots.first.path);
+      nextState = nextState.copyWith(
+        activeProjectPath: state.projectRoots.first.path,
+      );
     }
 
     if (state.defaultLibraries.isNotEmpty && state.activeLibraryPath == null) {
       await _persistActiveLibrary(state.defaultLibraries.first.path);
-      nextState = nextState.copyWith(activeLibraryPath: state.defaultLibraries.first.path);
+      nextState = nextState.copyWith(
+        activeLibraryPath: state.defaultLibraries.first.path,
+      );
     }
 
     return nextState;
@@ -119,8 +137,9 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     final current = await future;
     final normalized = p.normalize(path);
 
-    final updatedRoots =
-        current.projectRoots.where((root) => root.path != normalized).toList();
+    final updatedRoots = current.projectRoots
+        .where((root) => root.path != normalized)
+        .toList();
 
     if (updatedRoots.length == current.projectRoots.length) {
       return;
@@ -134,10 +153,18 @@ class SettingsController extends AsyncNotifier<SettingsState> {
       await _persistActiveProject(newActive);
     }
 
+    var updatedFavorites = current.folderFavorites;
+    if (current.folderFavorites.containsKey(normalized)) {
+      updatedFavorites = _cloneFavorites(current.folderFavorites);
+      updatedFavorites.remove(normalized);
+      await _persistFolderFavorites(updatedFavorites);
+    }
+
     state = AsyncValue.data(
       current.copyWith(
         projectRoots: updatedRoots,
         activeProjectPath: newActive,
+        folderFavorites: updatedFavorites,
       ),
     );
   }
@@ -178,8 +205,9 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     final current = await future;
     final normalized = p.normalize(path);
 
-    final updatedLibraries =
-        current.defaultLibraries.where((root) => root.path != normalized).toList();
+    final updatedLibraries = current.defaultLibraries
+        .where((root) => root.path != normalized)
+        .toList();
 
     if (updatedLibraries.length == current.defaultLibraries.length) {
       return;
@@ -189,14 +217,24 @@ class SettingsController extends AsyncNotifier<SettingsState> {
 
     var newActive = current.activeLibraryPath;
     if (newActive == normalized) {
-      newActive = updatedLibraries.isNotEmpty ? updatedLibraries.first.path : null;
+      newActive = updatedLibraries.isNotEmpty
+          ? updatedLibraries.first.path
+          : null;
       await _persistActiveLibrary(newActive);
+    }
+
+    var updatedFavorites = current.folderFavorites;
+    if (current.folderFavorites.containsKey(normalized)) {
+      updatedFavorites = _cloneFavorites(current.folderFavorites);
+      updatedFavorites.remove(normalized);
+      await _persistFolderFavorites(updatedFavorites);
     }
 
     state = AsyncValue.data(
       current.copyWith(
         defaultLibraries: updatedLibraries,
         activeLibraryPath: newActive,
+        folderFavorites: updatedFavorites,
       ),
     );
   }
@@ -206,8 +244,11 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     final normalized = p.normalize(path);
 
     final updatedLibraries = current.defaultLibraries
-        .map((root) =>
-            root.path == normalized ? ProjectRoot(path: root.path, label: label) : root)
+        .map(
+          (root) => root.path == normalized
+              ? ProjectRoot(path: root.path, label: label)
+              : root,
+        )
         .toList();
 
     await _persistDefaultLibraries(updatedLibraries);
@@ -222,14 +263,53 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     final normalized = p.normalize(path);
 
     final updatedRoots = current.projectRoots
-        .map((root) =>
-            root.path == normalized ? ProjectRoot(path: root.path, label: label) : root)
+        .map(
+          (root) => root.path == normalized
+              ? ProjectRoot(path: root.path, label: label)
+              : root,
+        )
         .toList();
 
     await _persistProjectRoots(updatedRoots);
 
+    state = AsyncValue.data(current.copyWith(projectRoots: updatedRoots));
+  }
+
+  Future<void> toggleFavoriteFolder({
+    required String rootPath,
+    required String relativePath,
+  }) async {
+    final current = await future;
+    final normalizedRoot = p.normalize(rootPath);
+    final normalizedRelative = relativePath.isEmpty
+        ? ''
+        : p.normalize(relativePath);
+
+    final updatedFavorites = _cloneFavorites(current.folderFavorites);
+    final existing = updatedFavorites[normalizedRoot];
+    final favoritesForRoot = existing != null
+        ? List<String>.from(existing)
+        : <String>[];
+
+    if (favoritesForRoot.contains(normalizedRelative)) {
+      favoritesForRoot.remove(normalizedRelative);
+      if (favoritesForRoot.isEmpty) {
+        updatedFavorites.remove(normalizedRoot);
+      } else {
+        updatedFavorites[normalizedRoot] = favoritesForRoot;
+      }
+    } else {
+      favoritesForRoot.add(normalizedRelative);
+      favoritesForRoot.sort(
+        (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
+      );
+      updatedFavorites[normalizedRoot] = favoritesForRoot;
+    }
+
+    await _persistFolderFavorites(updatedFavorites);
+
     state = AsyncValue.data(
-      current.copyWith(projectRoots: updatedRoots),
+      current.copyWith(folderFavorites: updatedFavorites),
     );
   }
 
@@ -242,9 +322,7 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     }
 
     await _persistActiveProject(normalized);
-    state = AsyncValue.data(
-      current.copyWith(activeProjectPath: normalized),
-    );
+    state = AsyncValue.data(current.copyWith(activeProjectPath: normalized));
   }
 
   Future<void> setActiveLibrary(String path) async {
@@ -256,25 +334,19 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     }
 
     await _persistActiveLibrary(normalized);
-    state = AsyncValue.data(
-      current.copyWith(activeLibraryPath: normalized),
-    );
+    state = AsyncValue.data(current.copyWith(activeLibraryPath: normalized));
   }
 
   Future<void> updateFreecadExecutable(String? path) async {
     final current = await future;
     await _persistSetting('freecad_executable', path);
-    state = AsyncValue.data(
-      current.copyWith(freecadExecutable: path),
-    );
+    state = AsyncValue.data(current.copyWith(freecadExecutable: path));
   }
 
   Future<void> updateThemePreference(ThemePreference preference) async {
     final current = await future;
     await _persistSetting('theme_preference', preference.storageValue);
-    state = AsyncValue.data(
-      current.copyWith(themePreference: preference),
-    );
+    state = AsyncValue.data(current.copyWith(themePreference: preference));
   }
 
   Future<void> _persistProjectRoots(List<ProjectRoot> roots) async {
@@ -283,8 +355,20 @@ class SettingsController extends AsyncNotifier<SettingsState> {
   }
 
   Future<void> _persistDefaultLibraries(List<ProjectRoot> libraries) async {
-    final jsonString = jsonEncode(libraries.map((root) => root.toJson()).toList());
+    final jsonString = jsonEncode(
+      libraries.map((root) => root.toJson()).toList(),
+    );
     await _persistSetting('default_libraries', jsonString);
+  }
+
+  Future<void> _persistFolderFavorites(
+    Map<String, List<String>> folderFavorites,
+  ) async {
+    final jsonMap = folderFavorites.map(
+      (key, value) => MapEntry(key, List<String>.from(value)),
+    );
+    final jsonString = jsonEncode(jsonMap);
+    await _persistSetting('folder_favorites', jsonString);
   }
 
   Future<void> _persistActiveProject(String? path) async {
@@ -302,9 +386,7 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     }
     final first = current.projectRoots.first.path;
     await _persistActiveProject(first);
-    state = AsyncValue.data(
-      current.copyWith(activeProjectPath: first),
-    );
+    state = AsyncValue.data(current.copyWith(activeProjectPath: first));
   }
 
   Future<void> _ensureActiveLibrary() async {
@@ -314,19 +396,20 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     }
     final first = current.defaultLibraries.first.path;
     await _persistActiveLibrary(first);
-    state = AsyncValue.data(
-      current.copyWith(activeLibraryPath: first),
-    );
+    state = AsyncValue.data(current.copyWith(activeLibraryPath: first));
+  }
+
+  Map<String, List<String>> _cloneFavorites(Map<String, List<String>> source) {
+    return {
+      for (final entry in source.entries)
+        entry.key: List<String>.from(entry.value),
+    };
   }
 
   Future<void> _persistSetting(String key, Object? value) async {
-    await _db.insert(
-      'settings',
-      {
-        'key': key,
-        'value': value?.toString(),
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await _db.insert('settings', {
+      'key': key,
+      'value': value?.toString(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 }

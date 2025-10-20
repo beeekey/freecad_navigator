@@ -8,6 +8,7 @@ import 'package:transparent_image/transparent_image.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/db.dart';
+import '../../core/indexing_service.dart';
 import '../../core/mesh_generator.dart' show meshCachePath;
 import '../../core/metadata_repository.dart';
 import '../../core/platform.dart';
@@ -50,6 +51,7 @@ class _DetailsPanelState extends ConsumerState<DetailsPanel> {
   bool _dirty = false;
   bool _isSaving = false;
   bool _isBatchSaving = false;
+  bool _isGeneratingPreview = false;
   String? _lastHydratedSignature;
 
   @override
@@ -200,7 +202,6 @@ class _DetailsPanelState extends ConsumerState<DetailsPanel> {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        // Preview/mesh generation actions temporarily disabled until FreeCAD CLI rendering is stable.
                         FilledButton.icon(
                           icon: _isSaving
                               ? const SizedBox(
@@ -213,6 +214,25 @@ class _DetailsPanelState extends ConsumerState<DetailsPanel> {
                           onPressed: _isSaving || !_dirty
                               ? null
                               : () => _saveSingle(context, record),
+                        ),
+                        OutlinedButton.icon(
+                          icon: _isGeneratingPreview
+                              ? const SizedBox(
+                                  height: 16,
+                                  width: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.image_outlined),
+                          label: Text(_isGeneratingPreview ? 'Generating…' : 'Generate preview'),
+                          onPressed: _isGeneratingPreview ||
+                                  settings.freecadExecutable == null ||
+                                  settings.freecadExecutable!.isEmpty
+                              ? null
+                              : () => _generatePreview(
+                                    context,
+                                    record,
+                                    settings.freecadExecutable!,
+                                  ),
                         ),
                         OutlinedButton.icon(
                           icon: const Icon(Icons.undo),
@@ -422,6 +442,7 @@ class _DetailsPanelState extends ConsumerState<DetailsPanel> {
       ..selection = TextSelection.collapsed(offset: comment.length);
 
     _lastHydratedSignature = signature;
+    _isGeneratingPreview = false;
     _dirty = false;
   }
 
@@ -611,6 +632,37 @@ class _DetailsPanelState extends ConsumerState<DetailsPanel> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to reveal file: $error')),
       );
+    }
+  }
+
+  Future<void> _generatePreview(
+    BuildContext context,
+    FileRecord record,
+    String executable,
+  ) async {
+    setState(() => _isGeneratingPreview = true);
+
+    try {
+      final path = await ref
+          .read(indexingControllerProvider.notifier)
+          .generatePreviewFor(record, executable);
+
+      ref.invalidate(fileByIdProvider(record.id));
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Preview updated: ${p.basename(path)}')),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to generate preview: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingPreview = false);
+      } else {
+        _isGeneratingPreview = false;
+      }
     }
   }
 }

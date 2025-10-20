@@ -20,6 +20,6 @@ void main() {
 
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    expect(find.text('FreeCAD Explorer'), findsOneWidget);
+    expect(find.text('FreeCAD Navigator'), findsOneWidget);
   });
 }
