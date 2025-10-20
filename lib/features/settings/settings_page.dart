@@ -180,6 +180,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   label: Text(_isDetecting ? 'Detecting…' : 'Auto-detect FreeCAD'),
                   onPressed: _isDetecting ? null : () => _detectFreecad(context),
                 ),
+                const SizedBox(height: 12),
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Force headless previews'),
+                  subtitle: const Text(
+                    'Always wrap FreeCAD in a virtual display (xvfb-run) even when a desktop session is available.',
+                  ),
+                  value: settings.forceHeadlessPreviews,
+                  onChanged: (value) => ref
+                      .read(settingsControllerProvider.notifier)
+                      .updateForceHeadlessPreviews(value),
+                ),
               ],
             ),
           );

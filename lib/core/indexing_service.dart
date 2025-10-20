@@ -61,6 +61,7 @@ class IndexingController extends AsyncNotifier<IndexingState> {
   late Database _db;
   late AppDirectories _dirs;
   late MetadataRepository _metadataRepository;
+  SettingsState? _latestSettings;
 
   final Map<String, StreamSubscription<WatchEvent>> _watchers = {};
   final Map<String, Timer> _debounceTimers = {};
@@ -73,10 +74,15 @@ class IndexingController extends AsyncNotifier<IndexingState> {
     _dirs = await ref.watch(appDirectoriesProvider.future);
     _metadataRepository = MetadataRepository(_db);
 
+    _latestSettings = await ref.watch(settingsControllerProvider.future);
+
     ref.listen<AsyncValue<SettingsState>>(settingsControllerProvider, (
       previous,
       next,
     ) {
+      if (next.hasValue) {
+        _latestSettings = next.value;
+      }
       _handleSettingsChange(previous?.valueOrNull, next.valueOrNull);
     }, fireImmediately: true);
 
@@ -451,10 +457,12 @@ class IndexingController extends AsyncNotifier<IndexingState> {
     FileRecord record,
     String freecadExecutable,
   ) async {
+    final forceHeadless = _latestSettings?.forceHeadlessPreviews ?? false;
     final outputPath = await generatePreviewImage(
       freecadExecutable: freecadExecutable,
       filePath: record.path,
       cacheDir: _dirs.thumbCacheDir,
+      forceHeadless: forceHeadless,
     );
 
     final now = DateTime.now().millisecondsSinceEpoch;

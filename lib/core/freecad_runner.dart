@@ -43,6 +43,7 @@ Future<FreecadRunResult> runFreecadScript({
   required String scriptPath,
   Duration timeout = const Duration(minutes: 2),
   bool requireGui = true,
+  bool forceHeadless = false,
 }) async {
   var executableToRun = freecadExecutable;
   final exeLowerInitial = executableToRun.toLowerCase();
@@ -68,12 +69,19 @@ Future<FreecadRunResult> runFreecadScript({
   var processArgs = List<String>.from(baseArgs);
 
   final displayVar = Platform.environment['DISPLAY'];
-  if (Platform.isLinux && (displayVar == null || displayVar.isEmpty)) {
+  final wantsHeadless = forceHeadless || displayVar == null || displayVar.isEmpty;
+  if (Platform.isLinux && wantsHeadless) {
     final xvfbRun = await _findInPath('xvfb-run');
     if (xvfbRun == null) {
-      throw FreecadRunnerException(
-        'Cannot generate preview: DISPLAY is not set. Install xvfb-run or launch FreeCAD in a desktop session.',
-      );
+      if (forceHeadless) {
+        throw FreecadRunnerException(
+          'Force headless previews is enabled, but xvfb-run was not found in PATH.',
+        );
+      } else {
+        throw FreecadRunnerException(
+          'Cannot generate preview: DISPLAY is not set. Install xvfb-run or launch FreeCAD in a desktop session.',
+        );
+      }
     }
     processExecutable = xvfbRun;
     processArgs = [
@@ -83,7 +91,18 @@ Future<FreecadRunResult> runFreecadScript({
       executableToRun,
       ...baseArgs,
     ];
-    developer.log('Wrapping FreeCAD invocation with xvfb-run.', name: 'freecad');
+    developer.log(
+      forceHeadless
+          ? 'Wrapping FreeCAD invocation with xvfb-run (forced headless mode).'
+          : 'Wrapping FreeCAD invocation with xvfb-run.',
+      name: 'freecad',
+    );
+  } else if (forceHeadless && !Platform.isLinux) {
+    developer.log(
+      'Force headless previews requested, but xvfb-run wrapping is only supported on Linux.',
+      name: 'freecad',
+      level: 900,
+    );
   }
 
   final commandDescription = '$processExecutable ${processArgs.join(' ')}';

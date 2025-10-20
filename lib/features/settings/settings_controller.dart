@@ -29,6 +29,7 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     final activeLibraryPath = raw['active_library_path'];
     final freecadExecutable = raw['freecad_executable'];
     final themePreferenceValue = raw['theme_preference'];
+    final forceHeadlessValue = raw['force_headless_previews'];
     final folderFavoritesJson = raw['folder_favorites'];
 
     final projectRoots = <ProjectRoot>[];
@@ -77,6 +78,7 @@ class SettingsController extends AsyncNotifier<SettingsState> {
           ? defaultLibraries.first.path
           : null,
       freecadExecutable: freecadExecutable,
+      forceHeadlessPreviews: _parseBool(forceHeadlessValue),
       themePreference: ThemePreferenceX.fromStorage(themePreferenceValue),
       folderFavorites: folderFavorites,
     );
@@ -343,6 +345,14 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     state = AsyncValue.data(current.copyWith(freecadExecutable: path));
   }
 
+  Future<void> updateForceHeadlessPreviews(bool value) async {
+    final current = await future;
+    await _persistSetting('force_headless_previews', value ? 'true' : 'false');
+    state = AsyncValue.data(
+      current.copyWith(forceHeadlessPreviews: value),
+    );
+  }
+
   Future<void> updateThemePreference(ThemePreference preference) async {
     final current = await future;
     await _persistSetting('theme_preference', preference.storageValue);
@@ -404,6 +414,17 @@ class SettingsController extends AsyncNotifier<SettingsState> {
       for (final entry in source.entries)
         entry.key: List<String>.from(entry.value),
     };
+  }
+
+  bool _parseBool(String? value) {
+    if (value == null) {
+      return false;
+    }
+    final normalized = value.toLowerCase();
+    return normalized == 'true' ||
+        normalized == '1' ||
+        normalized == 'yes' ||
+        normalized == 'on';
   }
 
   Future<void> _persistSetting(String key, Object? value) async {

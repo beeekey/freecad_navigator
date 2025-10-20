@@ -23,6 +23,7 @@ Future<String> generatePreviewImage({
   required Directory cacheDir,
   int imageSize = 600,
   Duration timeout = const Duration(minutes: 2),
+  bool forceHeadless = false,
 }) async {
   final hash = sha1.convert(utf8.encode(filePath)).toString();
   final outputPath = p.join(cacheDir.path, '$hash.png');
@@ -223,6 +224,7 @@ finally:
       scriptPath: scriptPath,
       timeout: timeout,
       requireGui: true,
+      forceHeadless: forceHeadless,
     );
 
     if (!await outputFile.exists()) {

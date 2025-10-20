@@ -18,6 +18,7 @@ Lightweight, single-user product data management (PDM) companion for FreeCAD pro
 ## Getting Started
 1. Install Flutter 3.16+ with desktop support (Linux, Windows, or macOS).
 2. Install FreeCAD (GUI build). Ensure it can be launched from your desktop session.
+3. Install `sudo apt install xvfb` (for headless preview generation on Linux)
 3. Clone this repository and fetch dependencies:
    ```bash
    flutter pub get
