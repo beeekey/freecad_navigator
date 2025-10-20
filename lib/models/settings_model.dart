@@ -36,6 +36,58 @@ extension ThemePreferenceX on ThemePreference {
   };
 }
 
+enum WindowSizePreference {
+  compact,
+  standard,
+  spacious,
+  hd,
+  qhd,
+  uhd,
+  maximized,
+}
+
+extension WindowSizePreferenceX on WindowSizePreference {
+  String get storageValue => switch (this) {
+        WindowSizePreference.compact => 'compact',
+        WindowSizePreference.standard => 'standard',
+        WindowSizePreference.spacious => 'spacious',
+        WindowSizePreference.hd => 'hd',
+        WindowSizePreference.qhd => 'qhd',
+        WindowSizePreference.uhd => 'uhd',
+        WindowSizePreference.maximized => 'maximized',
+      };
+
+  String get label => switch (this) {
+        WindowSizePreference.compact => 'Compact (1024×640)',
+        WindowSizePreference.standard => 'Standard (1280×720)',
+        WindowSizePreference.spacious => 'Spacious (1440×900)',
+        WindowSizePreference.hd => 'HD (1920×1080)',
+        WindowSizePreference.qhd => 'QHD (2560×1440)',
+        WindowSizePreference.uhd => 'UHD (3840×2160)',
+        WindowSizePreference.maximized => 'Maximized',
+      };
+
+  static WindowSizePreference fromStorage(String? value) {
+    switch (value) {
+      case 'compact':
+        return WindowSizePreference.compact;
+      case 'spacious':
+        return WindowSizePreference.spacious;
+      case 'hd':
+        return WindowSizePreference.hd;
+      case 'qhd':
+        return WindowSizePreference.qhd;
+      case 'uhd':
+        return WindowSizePreference.uhd;
+      case 'maximized':
+        return WindowSizePreference.maximized;
+      case 'standard':
+      default:
+        return WindowSizePreference.standard;
+    }
+  }
+}
+
 class ProjectRoot {
   ProjectRoot({required this.path, this.label});
 
@@ -63,6 +115,7 @@ SettingsState({
     required this.activeLibraryPath,
     required this.freecadExecutable,
     required this.forceHeadlessPreviews,
+    required this.windowSizePreference,
     required this.themePreference,
     required this.folderFavorites,
   });
@@ -73,6 +126,7 @@ SettingsState({
   final String? activeLibraryPath;
   final String? freecadExecutable;
   final bool forceHeadlessPreviews;
+  final WindowSizePreference windowSizePreference;
   final ThemePreference themePreference;
   final Map<String, List<String>> folderFavorites;
 
@@ -114,6 +168,7 @@ SettingsState({
     bool resetActiveProjectPath = false,
     bool resetActiveLibraryPath = false,
     bool? forceHeadlessPreviews,
+    WindowSizePreference? windowSizePreference,
     ThemePreference? themePreference,
     Map<String, List<String>>? folderFavorites,
   }) {
@@ -129,6 +184,8 @@ SettingsState({
       freecadExecutable: freecadExecutable ?? this.freecadExecutable,
       forceHeadlessPreviews:
           forceHeadlessPreviews ?? this.forceHeadlessPreviews,
+      windowSizePreference:
+          windowSizePreference ?? this.windowSizePreference,
       themePreference: themePreference ?? this.themePreference,
       folderFavorites: folderFavorites ?? this.folderFavorites,
     );
@@ -141,6 +198,7 @@ SettingsState({
     'activeLibraryPath': activeLibraryPath,
     'freecadExecutable': freecadExecutable,
     'forceHeadlessPreviews': forceHeadlessPreviews,
+    'windowSizePreference': windowSizePreference.storageValue,
     'themePreference': themePreference.storageValue,
     'folderFavorites': folderFavorites.map(
       (key, value) => MapEntry(key, List<String>.from(value)),
@@ -162,6 +220,9 @@ SettingsState({
       activeLibraryPath: json['activeLibraryPath'] as String?,
       freecadExecutable: json['freecadExecutable'] as String?,
       forceHeadlessPreviews: _parseBool(json['forceHeadlessPreviews']),
+      windowSizePreference: WindowSizePreferenceX.fromStorage(
+        json['windowSizePreference'] as String?,
+      ),
       themePreference: ThemePreferenceX.fromStorage(
         json['themePreference'] as String?,
       ),
@@ -178,6 +239,7 @@ SettingsState({
     activeLibraryPath: null,
     freecadExecutable: null,
     forceHeadlessPreviews: false,
+    windowSizePreference: WindowSizePreference.standard,
     themePreference: ThemePreference.system,
     folderFavorites: const {},
   );

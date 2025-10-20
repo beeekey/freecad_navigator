@@ -326,6 +326,8 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
                                       context,
                                       activeRoot,
                                       settings.freecadExecutable!,
+                                      folder: browserState.activeFolder,
+                                      includeSubfolders: includeSubfolders,
                                     );
                                   },
                             icon: isGeneratingPreviews
@@ -537,14 +539,18 @@ class _BrowserPageState extends ConsumerState<BrowserPage> {
   Future<void> _generateMissingPreviews(
     BuildContext context,
     String rootPath,
-    String executable,
-  ) async {
+    String executable, {
+    required String folder,
+    required bool includeSubfolders,
+  }) async {
     try {
       final result = await ref
           .read(indexingControllerProvider.notifier)
           .generateMissingPreviews(
             projectRoot: rootPath,
             freecadExecutable: executable,
+            folder: folder,
+            includeSubfolders: includeSubfolders,
           );
       if (!context.mounted) return;
 

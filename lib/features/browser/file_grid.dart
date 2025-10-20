@@ -49,88 +49,45 @@ class FileGrid extends ConsumerWidget {
     );
 
     return filesAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () {
+        final cached = filesAsync.value;
+        if (cached != null) {
+          return _GridBody(
+            files: cached,
+            isIndexing: isIndexing,
+            includeSubfolders: includeSubfolders,
+            folder: folder,
+            projectRoot: projectRoot,
+            selection: selection,
+            onEnsureIndexed: () => ref
+                .read(indexingControllerProvider.notifier)
+                .ensureIndexed(projectRoot),
+            onTapTile: (record) => _handleTap(ref, record),
+            onOpenFile: onOpenFile,
+          );
+        }
+        return const Center(child: CircularProgressIndicator());
+      },
       error: (error, stackTrace) => Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text('Failed to load files: $error'),
         ),
       ),
-      data: (files) {
-        if (files.isEmpty) {
-          if (isIndexing) {
-            return const _IndexingPlaceholder();
-          }
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _emptyMessage(folder, includeSubfolders),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Refresh index'),
-                    onPressed: projectRoot.isEmpty
-                        ? null
-                        : () => ref
-                            .read(indexingControllerProvider.notifier)
-                            .ensureIndexed(projectRoot),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-
-        return Column(
-          children: [
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final crossAxisCount = _computeCrossAxisCount(constraints.maxWidth);
-                  return GridView.builder(
-                    padding: const EdgeInsets.all(16),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: crossAxisCount,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                      childAspectRatio: 1.1,
-                    ),
-                    itemCount: files.length,
-                    itemBuilder: (context, index) {
-                      final file = files[index];
-                      final isSelected = selection.contains(file.id);
-                      return _FileCard(
-                        file: file,
-                        isSelected: isSelected,
-                        onTap: () => _handleTap(ref, file),
-                        onDoubleTap: () => onOpenFile(file),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-            _GridFooter(
-              total: files.length,
-              selected: selection.length,
-            ),
-          ],
-        );
-      },
+      data: (files) => _GridBody(
+        files: files,
+        isIndexing: isIndexing,
+        includeSubfolders: includeSubfolders,
+        folder: folder,
+        projectRoot: projectRoot,
+        selection: selection,
+        onEnsureIndexed: () => ref
+            .read(indexingControllerProvider.notifier)
+            .ensureIndexed(projectRoot),
+        onTapTile: (record) => _handleTap(ref, record),
+        onOpenFile: onOpenFile,
+      ),
     );
-  }
-
-  int _computeCrossAxisCount(double maxWidth) {
-    if (maxWidth <= 600) return 2;
-    if (maxWidth <= 900) return 3;
-    if (maxWidth <= 1200) return 4;
-    return 5;
   }
 
   void _handleTap(WidgetRef ref, FileRecord record) {
@@ -147,6 +104,102 @@ class FileGrid extends ConsumerWidget {
           multiSelect: multiSelect,
         );
   }
+}
+
+class _GridBody extends StatelessWidget {
+  const _GridBody({
+    required this.files,
+    required this.isIndexing,
+    required this.includeSubfolders,
+    required this.folder,
+    required this.projectRoot,
+    required this.selection,
+    required this.onEnsureIndexed,
+    required this.onTapTile,
+    required this.onOpenFile,
+  });
+
+  final List<FileRecord> files;
+  final bool isIndexing;
+  final bool includeSubfolders;
+  final String folder;
+  final String projectRoot;
+  final Set<int> selection;
+  final VoidCallback onEnsureIndexed;
+  final void Function(FileRecord) onTapTile;
+  final void Function(FileRecord) onOpenFile;
+
+  @override
+  Widget build(BuildContext context) {
+    if (files.isEmpty) {
+      if (isIndexing) {
+        return const _IndexingPlaceholder();
+      }
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _emptyMessage(folder, includeSubfolders),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                icon: const Icon(Icons.refresh),
+                label: const Text('Refresh index'),
+                onPressed: projectRoot.isEmpty ? null : onEnsureIndexed,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final crossAxisCount = _computeGridCrossAxisCount(constraints.maxWidth);
+              return GridView.builder(
+                padding: const EdgeInsets.all(16),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: 1.1,
+                ),
+                itemCount: files.length,
+                itemBuilder: (context, index) {
+                  final file = files[index];
+                  final isSelected = selection.contains(file.id);
+                  return _FileCard(
+                    file: file,
+                    isSelected: isSelected,
+                    onTap: () => onTapTile(file),
+                    onDoubleTap: () => onOpenFile(file),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        _GridFooter(
+          total: files.length,
+          selected: selection.length,
+        ),
+      ],
+    );
+  }
+}
+
+int _computeGridCrossAxisCount(double maxWidth) {
+  if (maxWidth <= 600) return 2;
+  if (maxWidth <= 900) return 3;
+  if (maxWidth <= 1200) return 4;
+  return 5;
 }
 
 class _FileCard extends StatelessWidget {

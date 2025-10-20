@@ -18,7 +18,7 @@ class AppDirectories {
   final Directory meshCacheDir;
 }
 
-final appDirectoriesProvider = FutureProvider<AppDirectories>((ref) async {
+Future<AppDirectories> loadAppDirectories() async {
   final dataDir = await getApplicationSupportDirectory();
   final cacheDir = await getApplicationCacheDirectory();
   final thumbCacheDir = Directory(p.join(cacheDir.path, 'thumbnails'));
@@ -50,6 +50,10 @@ final appDirectoriesProvider = FutureProvider<AppDirectories>((ref) async {
     thumbCacheDir: thumbCacheDir,
     meshCacheDir: meshCacheDir,
   );
+}
+
+final appDirectoriesProvider = FutureProvider<AppDirectories>((ref) async {
+  return loadAppDirectories();
 });
 
 Future<void> _migrateLegacyPaths({

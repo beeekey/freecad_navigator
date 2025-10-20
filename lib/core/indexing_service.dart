@@ -230,11 +230,27 @@ class IndexingController extends AsyncNotifier<IndexingState> {
     await runInTransaction(_db, (txn) async {
       final existing = await txn.query(
         'files',
-        columns: ['id'],
+        columns: ['id', 'has_thumbnail', 'thumb_path'],
         where: 'path = ?',
         whereArgs: [result.path],
         limit: 1,
       );
+
+      var resolvedThumbPath = result.thumbnailPath;
+      var resolvedHasThumbnail = result.hasThumbnail;
+
+      if (!resolvedHasThumbnail && existing.isNotEmpty) {
+        final existingRow = existing.first;
+        final existingHas = (existingRow['has_thumbnail'] as int?) ?? 0;
+        final existingPath = existingRow['thumb_path'] as String?;
+        if (existingHas == 1 && existingPath != null) {
+          final existingFile = File(existingPath);
+          if (await existingFile.exists()) {
+            resolvedThumbPath = existingPath;
+            resolvedHasThumbnail = true;
+          }
+        }
+      }
 
       int fileId;
       final baseValues = {
@@ -245,8 +261,8 @@ class IndexingController extends AsyncNotifier<IndexingState> {
         'ext': ext,
         'mtime': result.mtimeMs,
         'size': result.size,
-        'has_thumbnail': result.hasThumbnail ? 1 : 0,
-        'thumb_path': result.thumbnailPath,
+        'has_thumbnail': resolvedHasThumbnail ? 1 : 0,
+        'thumb_path': resolvedThumbPath,
         'title': _deriveTitle(result.metadata, sidecar, filename),
         'last_indexed': now,
       };
@@ -480,6 +496,8 @@ class IndexingController extends AsyncNotifier<IndexingState> {
   Future<PreviewBatchResult> generateMissingPreviews({
     required String projectRoot,
     required String freecadExecutable,
+    String folder = '',
+    bool includeSubfolders = false,
   }) {
     if (projectRoot.isEmpty) {
       return Future.value((attempted: 0, generated: 0, removed: 0, failed: 0));
@@ -491,6 +509,8 @@ class IndexingController extends AsyncNotifier<IndexingState> {
     final future = _generateMissingPreviewsForRoot(
       normalizedRoot,
       freecadExecutable,
+      folder: folder,
+      includeSubfolders: includeSubfolders,
     );
     _previewJobsInFlight[normalizedRoot] = future;
     future.whenComplete(() => _previewJobsInFlight.remove(normalizedRoot));
@@ -499,12 +519,34 @@ class IndexingController extends AsyncNotifier<IndexingState> {
 
   Future<PreviewBatchResult> _generateMissingPreviewsForRoot(
     String normalizedRoot,
-    String freecadExecutable,
-  ) async {
+    String freecadExecutable, {
+    String folder = '',
+    bool includeSubfolders = false,
+  }) async {
+    final whereClauses = <String>['project_root = ?', 'has_thumbnail = 0'];
+    final whereArgs = <Object?>[normalizedRoot];
+
+    if (folder.isEmpty) {
+      if (!includeSubfolders) {
+        whereClauses.add('(folder = ? OR folder IS NULL)');
+        whereArgs.add('');
+      }
+    } else if (includeSubfolders) {
+      final escaped = folder.replaceAll('%', r'\%').replaceAll('_', r'\_');
+      whereClauses.add('(folder = ? OR folder LIKE ? ESCAPE "\\")');
+      whereArgs.addAll([
+        folder,
+        '$escaped/%',
+      ]);
+    } else {
+      whereClauses.add('folder = ?');
+      whereArgs.add(folder);
+    }
+
     final rows = await _db.query(
       'files',
-      where: 'project_root = ? AND has_thumbnail = 0',
-      whereArgs: [normalizedRoot],
+      where: whereClauses.join(' AND '),
+      whereArgs: whereArgs,
       orderBy: 'path COLLATE NOCASE',
     );
 

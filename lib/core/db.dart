@@ -16,8 +16,11 @@ final databaseProvider = FutureProvider<Database>((ref) async {
   final factory = ref.watch(databaseFactoryProvider);
   final dirs = await ref.watch(appDirectoriesProvider.future);
   final dbPath = p.join(dirs.dataDir.path, 'freecad_explorer.db');
+  return openAppDatabase(factory, dbPath);
+});
 
-  final db = await factory.openDatabase(
+Future<Database> openAppDatabase(DatabaseFactory factory, String dbPath) {
+  return factory.openDatabase(
     dbPath,
     options: OpenDatabaseOptions(
       version: 1,
@@ -28,9 +31,7 @@ final databaseProvider = FutureProvider<Database>((ref) async {
       onUpgrade: _migrateSchema,
     ),
   );
-
-  return db;
-});
+}
 
 Future<void> _createSchema(Database db, int version) async {
   await db.execute('''

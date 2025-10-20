@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/platform.dart';
+import '../../core/window_size_prefs.dart';
 import '../../models/settings_model.dart';
 import 'settings_controller.dart';
 
@@ -144,6 +145,38 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           .updateThemePreference(selection.first);
                     }
                   },
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Startup window size',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                InputDecorator(
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Window size',
+                  ),
+                  child: DropdownButton<WindowSizePreference>(
+                    value: settings.windowSizePreference,
+                    isExpanded: true,
+                    underline: const SizedBox.shrink(),
+                    items: WindowSizePreference.values
+                        .map(
+                          (pref) => DropdownMenuItem(
+                            value: pref,
+                            child: Text(pref.label),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) async {
+                      if (value == null) return;
+                      await ref
+                          .read(settingsControllerProvider.notifier)
+                          .updateWindowSizePreference(value);
+                      await applyWindowSizePreference(value);
+                    },
+                  ),
                 ),
                 const SizedBox(height: 24),
                 const Divider(height: 32),

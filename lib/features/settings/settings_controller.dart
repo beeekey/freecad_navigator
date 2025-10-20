@@ -30,6 +30,7 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     final freecadExecutable = raw['freecad_executable'];
     final themePreferenceValue = raw['theme_preference'];
     final forceHeadlessValue = raw['force_headless_previews'];
+    final windowSizeValue = raw['window_size_preference'];
     final folderFavoritesJson = raw['folder_favorites'];
 
     final projectRoots = <ProjectRoot>[];
@@ -79,6 +80,7 @@ class SettingsController extends AsyncNotifier<SettingsState> {
           : null,
       freecadExecutable: freecadExecutable,
       forceHeadlessPreviews: _parseBool(forceHeadlessValue),
+      windowSizePreference: WindowSizePreferenceX.fromStorage(windowSizeValue),
       themePreference: ThemePreferenceX.fromStorage(themePreferenceValue),
       folderFavorites: folderFavorites,
     );
@@ -350,6 +352,14 @@ class SettingsController extends AsyncNotifier<SettingsState> {
     await _persistSetting('force_headless_previews', value ? 'true' : 'false');
     state = AsyncValue.data(
       current.copyWith(forceHeadlessPreviews: value),
+    );
+  }
+
+  Future<void> updateWindowSizePreference(WindowSizePreference preference) async {
+    final current = await future;
+    await _persistSetting('window_size_preference', preference.storageValue);
+    state = AsyncValue.data(
+      current.copyWith(windowSizePreference: preference),
     );
   }
 

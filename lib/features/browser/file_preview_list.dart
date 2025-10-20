@@ -48,48 +48,32 @@ class FilePreviewList extends ConsumerWidget {
     );
 
     return filesAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () {
+        final cached = filesAsync.value;
+        if (cached != null) {
+          return _ListBody(
+            files: cached,
+            isIndexing: isIndexing,
+            selection: selection,
+            onTap: onTap,
+            onOpen: onOpen,
+          );
+        }
+        return const Center(child: CircularProgressIndicator());
+      },
       error: (error, stackTrace) => Center(
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Text('Failed to load list: $error'),
         ),
       ),
-      data: (files) {
-        if (files.isEmpty) {
-          if (isIndexing) {
-            return const _IndexingPlaceholder();
-          }
-          return const Center(child: Text('No files'));
-        }
-        return ListView.separated(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          itemCount: files.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (context, index) {
-            final file = files[index];
-            final isSelected = selection.contains(file.id);
-            return ListTile(
-              dense: true,
-              selected: isSelected,
-              selectedTileColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
-              leading: _ThumbnailAvatar(path: file.thumbPath),
-              title: Text(
-                file.filename,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text(
-                _formatModified(file.mtime),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              onTap: () => onTap(file),
-              onLongPress: () => onOpen(file),
-            );
-          },
-        );
-      },
+      data: (files) => _ListBody(
+        files: files,
+        isIndexing: isIndexing,
+        selection: selection,
+        onTap: onTap,
+        onOpen: onOpen,
+      ),
     );
   }
 }
@@ -119,6 +103,59 @@ class _IndexingPlaceholder extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ListBody extends StatelessWidget {
+  const _ListBody({
+    required this.files,
+    required this.isIndexing,
+    required this.selection,
+    required this.onTap,
+    required this.onOpen,
+  });
+
+  final List<FileRecord> files;
+  final bool isIndexing;
+  final Set<int> selection;
+  final void Function(FileRecord) onTap;
+  final void Function(FileRecord) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    if (files.isEmpty) {
+      if (isIndexing) {
+        return const _IndexingPlaceholder();
+      }
+      return const Center(child: Text('No files'));
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      itemCount: files.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final file = files[index];
+        final isSelected = selection.contains(file.id);
+        return ListTile(
+          dense: true,
+          selected: isSelected,
+          selectedTileColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+          leading: _ThumbnailAvatar(path: file.thumbPath),
+          title: Text(
+            file.filename,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Text(
+            _formatModified(file.mtime),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: () => onTap(file),
+          onLongPress: () => onOpen(file),
+        );
+      },
     );
   }
 }
